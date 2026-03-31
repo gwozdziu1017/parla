@@ -1305,12 +1305,15 @@
   let sessionStarted       = false;
   let sessionActive        = false;    // false = loop should stop
   let sessionCost          = 0;
-  let currentAudio         = null;
+  let currentAudio         = null;     // points to audioPlayer when playing, null otherwise
   let recognition          = null;
   let silenceTimer         = null;
   let interimEl            = null;
   let accumTranscript      = '';
   let conversationHistory  = [];       // [{role, content}] sent to Claude
+
+  // Single Audio element created at load time so iOS gesture unlock persists
+  const audioPlayer = new Audio();
 
   /* ================================ */
   /* NAVIGATION                       */
@@ -1463,7 +1466,7 @@
     sessionCost         = 0;
     conversationHistory = [];
     stopListening();
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    stopAudio();
     sessionState = 'idle';
     applyState();
     updateCostDisplay();
@@ -1477,7 +1480,7 @@
   function endSession() {
     sessionActive = false;
     stopListening();
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    stopAudio();
     sessionStarted = false;
     sessionState   = 'idle';
     applyState();
@@ -1489,6 +1492,11 @@
     if (sessionState === 'loading' || sessionState === 'speaking' || sessionState === 'listening') return;
 
     if (!sessionStarted) {
+      // Unlock audio on iOS — must happen synchronously inside the gesture handler
+      audioPlayer.play().catch(() => {});
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+
       sessionStarted = true;
       sessionActive  = true;
       speak(TUTORS[activeTutor].greeting);
@@ -1579,7 +1587,8 @@
         throw new Error(msg);
       }
 
-      const blob = await response.blob();
+      // Explicit type so iOS doesn't have to guess the codec
+      const blob = new Blob([await response.arrayBuffer()], { type: 'audio/mpeg' });
       const url  = URL.createObjectURL(blob);
 
       // Track cost: $15 per 1M characters
@@ -1588,23 +1597,22 @@
       // Append to conversation log
       appendMessage('tutor', text);
 
-      // Play
+      // Play via the pre-unlocked global audioPlayer
       sessionState = 'speaking';
       applyState();
 
-      currentAudio = new Audio(url);
-
       // iOS: onended is unreliable. Use a flag so only the first of
-      // onended / fallback timer can trigger the next listening cycle.
+      // onended / fallback timer triggers the next listening cycle.
       let listenerStarted = false;
       const afterSpeech = () => {
         if (listenerStarted) return;
         listenerStarted = true;
         clearTimeout(audioFallbackTimer);
+        audioPlayer.onended = null;
+        audioPlayer.onerror = null;
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          // Small delay so mic doesn't catch the tail end of the tutor's voice
           setTimeout(() => startListening(), 500);
         } else {
           sessionState = 'idle';
@@ -1612,21 +1620,29 @@
         }
       };
 
-      currentAudio.onended = afterSpeech;
-      currentAudio.onerror = () => {
+      audioPlayer.onended = afterSpeech;
+      audioPlayer.onerror = () => {
         listenerStarted = true;
         clearTimeout(audioFallbackTimer);
+        audioPlayer.onended = null;
+        audioPlayer.onerror = null;
         URL.revokeObjectURL(url);
         currentAudio = null;
         sessionState = 'idle';
         applyState();
       };
 
-      // Fallback: estimate duration at ~80ms per character, plus 500ms tail buffer
+      // Fallback: ~80ms per character + 500ms tail buffer
       const estimatedMs = text.length * 80 + 500;
       const audioFallbackTimer = setTimeout(afterSpeech, estimatedMs);
 
-      currentAudio.play();
+      audioPlayer.src = url;
+      currentAudio = audioPlayer;
+      console.log('[Parla] speak() playing via audioPlayer, text length:', text.length);
+      audioPlayer.play().catch(err => {
+        console.error('[Parla] audioPlayer.play() rejected:', err);
+        afterSpeech();
+      });
 
     } catch (err) {
       sessionState = 'idle';
@@ -1775,6 +1791,14 @@
     if (interimEl) { interimEl.remove(); interimEl = null; }
   }
 
+  function stopAudio() {
+    audioPlayer.onended = null;
+    audioPlayer.onerror = null;
+    try { audioPlayer.pause(); } catch {}
+    audioPlayer.src = '';
+    currentAudio = null;
+  }
+
   async function onSpeechResult(transcript) {
     if (interimEl) { interimEl.remove(); interimEl = null; }
 
@@ -1788,6 +1812,7 @@
       if (!raw || !sessionActive) return;
 
       const cleaned = handleVocabSave(raw);
+      console.log('[Parla] Claude response received, calling speak():', cleaned.slice(0, 60));
       speak(cleaned);
     } catch (err) {
       speak('Sorry, I had a problem connecting. The error was: ' + err.message);
