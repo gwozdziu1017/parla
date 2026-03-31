@@ -1300,16 +1300,17 @@
     },
   };
 
-  let activeTutor      = 'claire';
-  let sessionState     = 'idle';   // idle | loading | speaking | listening
-  let sessionStarted   = false;
-  let sessionActive    = false;    // false = loop should stop
-  let sessionCost      = 0;
-  let currentAudio     = null;
-  let recognition      = null;
-  let silenceTimer     = null;
-  let interimEl        = null;
-  let accumTranscript  = '';
+  let activeTutor          = 'claire';
+  let sessionState         = 'idle';   // idle | loading | speaking | listening
+  let sessionStarted       = false;
+  let sessionActive        = false;    // false = loop should stop
+  let sessionCost          = 0;
+  let currentAudio         = null;
+  let recognition          = null;
+  let silenceTimer         = null;
+  let interimEl            = null;
+  let accumTranscript      = '';
+  let conversationHistory  = [];       // [{role, content}] sent to Claude
 
   /* ================================ */
   /* NAVIGATION                       */
@@ -1399,7 +1400,8 @@
     };
     localStorage.setItem('parla_settings', JSON.stringify(data));
     // Also store API keys as standalone keys for direct lookup
-    localStorage.setItem('openai_api_key', data.openaiKey);
+    localStorage.setItem('openai_api_key',     data.openaiKey);
+    localStorage.setItem('anthropic_api_key',  data.anthropicKey);
   }
 
   function restore() {
@@ -1441,10 +1443,10 @@
       document.querySelectorAll('#corr-tabs .seg-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.corr === d.corrStyle));
     }
-    if (d.anthropicKey) document.getElementById('anthropic-key').value = d.anthropicKey;
-    // Prefer standalone key; fall back to the value nested in the settings blob
-    const storedOpenAI = localStorage.getItem('openai_api_key') || d.openaiKey || '';
-    if (storedOpenAI)   document.getElementById('openai-key').value    = storedOpenAI;
+    const storedAnthropic = localStorage.getItem('anthropic_api_key') || d.anthropicKey || '';
+    if (storedAnthropic) document.getElementById('anthropic-key').value = storedAnthropic;
+    const storedOpenAI    = localStorage.getItem('openai_api_key')    || d.openaiKey    || '';
+    if (storedOpenAI)    document.getElementById('openai-key').value    = storedOpenAI;
   }
 
   /* ================================ */
@@ -1456,9 +1458,10 @@
     document.getElementById('sess-role').textContent = t.role;
 
     // reset session state
-    sessionActive  = false;
-    sessionStarted = false;
-    sessionCost    = 0;
+    sessionActive       = false;
+    sessionStarted      = false;
+    sessionCost         = 0;
+    conversationHistory = [];
     stopListening();
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     sessionState = 'idle';
@@ -1590,22 +1593,39 @@
       applyState();
 
       currentAudio = new Audio(url);
-      currentAudio.onended = () => {
+
+      // iOS: onended is unreliable. Use a flag so only the first of
+      // onended / fallback timer can trigger the next listening cycle.
+      let listenerStarted = false;
+      const afterSpeech = () => {
+        if (listenerStarted) return;
+        listenerStarted = true;
+        clearTimeout(audioFallbackTimer);
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          startListening();
+          // Small delay so mic doesn't catch the tail end of the tutor's voice
+          setTimeout(() => startListening(), 500);
         } else {
           sessionState = 'idle';
           applyState();
         }
       };
+
+      currentAudio.onended = afterSpeech;
       currentAudio.onerror = () => {
+        listenerStarted = true;
+        clearTimeout(audioFallbackTimer);
         URL.revokeObjectURL(url);
         currentAudio = null;
         sessionState = 'idle';
         applyState();
       };
+
+      // Fallback: estimate duration at ~80ms per character, plus 500ms tail buffer
+      const estimatedMs = text.length * 80 + 500;
+      const audioFallbackTimer = setTimeout(afterSpeech, estimatedMs);
+
       currentAudio.play();
 
     } catch (err) {
@@ -1755,18 +1775,139 @@
     if (interimEl) { interimEl.remove(); interimEl = null; }
   }
 
-  function onSpeechResult(transcript) {
-    // Interim el already updated to final style by onresult; remove it and
-    // replace with a permanent message bubble
+  async function onSpeechResult(transcript) {
     if (interimEl) { interimEl.remove(); interimEl = null; }
 
     appendMessage('user', transcript);
 
-    sessionState = 'idle';
+    sessionState = 'loading';
     applyState();
 
-    // Hardcoded echo — will be replaced by Claude API
-    speak('Interesting, tell me more.');
+    try {
+      const raw = await askClaude(transcript);
+      if (!raw || !sessionActive) return;
+
+      const cleaned = handleVocabSave(raw);
+      speak(cleaned);
+    } catch (err) {
+      speak('Sorry, I had a problem connecting. The error was: ' + err.message);
+    }
+  }
+
+  /* ================================ */
+  /* CLAUDE API                        */
+  /* ================================ */
+  function buildSystemPrompt() {
+    const s     = JSON.parse(localStorage.getItem('parla_settings') || '{}');
+    const tutor = TUTORS[activeTutor];
+
+    const levelMap = { beginner: 'Beginner', intermediate: 'Intermediate', native: 'Native-level' };
+    const level    = levelMap[s.level] || 'Intermediate';
+    const nativeLang   = s.nativeLang  || 'not specified';
+    const corrStyle    = s.corrStyle   || 'brief';
+
+    const presetPersonalities = {
+      colleague: 'Friendly, relaxed colleague who chats naturally, shares opinions, and gently encourages',
+      strict:    'Strict but fair teacher who corrects every mistake precisely and holds high standards',
+      debate:    "Sharp debate partner who challenges ideas, plays devil's advocate, and pushes back on weak arguments",
+    };
+
+    let personality;
+    if (s.persTab === 'write' && s.customDesc) {
+      personality = s.customDesc;
+    } else {
+      personality = presetPersonalities[s.presetPick] || presetPersonalities.colleague;
+    }
+
+    const corrStyleDesc = corrStyle === 'explained'
+      ? "Explained — correct and briefly explain why, e.g. \"it's 'have been' — we use present perfect here because...\""
+      : "Brief — correct naturally in passing, e.g. \"by the way, it's 'have been', not 'have went'\"";
+
+    return `You are ${tutor.name}, an English tutor in a voice conversation app called Parla.
+
+Personality: ${personality}
+Student level: ${level}
+Student's native language: ${nativeLang}
+
+CONVERSATION RULES:
+- Keep responses short — 2-4 sentences max, this is a voice conversation
+- Talk naturally like a real person, not a textbook
+- Never use bullet points, lists, or markdown — spoken word only
+- Continue the conversation naturally after corrections
+
+CORRECTION RULES based on level:
+- Beginner: correct only major errors that change meaning, max 1-2 per response, very gentle
+- Intermediate: correct clear grammar mistakes and unnatural phrasing, up to 2-3 per response
+- Native: correct everything including collocations and register, be thorough
+
+CORRECTION STYLE: ${corrStyleDesc}
+
+VOCABULARY:
+- If the user says "write it down" or "save that" or similar, respond with exactly this format at the end of your response: [SAVE_WORD: word | example: example sentence | note: usage note]
+- Otherwise never include that tag
+
+Respond only in plain spoken English. No formatting, no lists, no markdown.`;
+  }
+
+  async function askClaude(userText) {
+    const apiKey = localStorage.getItem('anthropic_api_key') || '';
+    if (!apiKey) {
+      alert('Please add your Anthropic API key in Settings first.');
+      endSession();
+      return null;
+    }
+
+    conversationHistory.push({ role: 'user', content: userText });
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':                              apiKey,
+        'anthropic-version':                      '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type':                           'application/json',
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system:     buildSystemPrompt(),
+        messages:   conversationHistory,
+      }),
+    });
+
+    if (!response.ok) {
+      let msg = `Claude API error ${response.status}`;
+      try { const e = await response.json(); msg = e.error?.message || msg; } catch {}
+      conversationHistory.pop(); // remove the user turn we just pushed
+      throw new Error(msg);
+    }
+
+    const data       = await response.json();
+    const replyText  = data.content?.[0]?.text || '';
+
+    // Cost: $3/M input tokens, $15/M output tokens
+    const inputCost  = (data.usage?.input_tokens  || 0) * 3  / 1_000_000;
+    const outputCost = (data.usage?.output_tokens || 0) * 15 / 1_000_000;
+    addCost(inputCost + outputCost);
+
+    conversationHistory.push({ role: 'assistant', content: replyText });
+
+    return replyText;
+  }
+
+  function handleVocabSave(text) {
+    const match = text.match(/\[SAVE_WORD:\s*([^|]+)\|\s*example:\s*([^|]+)\|\s*note:\s*([^\]]+)\]/i);
+    if (match) {
+      const word    = match[1].trim();
+      const example = match[2].trim();
+      const note    = match[3].trim();
+      const date    = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+      const vocab = JSON.parse(localStorage.getItem('vocabulary_notebook') || '[]');
+      vocab.unshift({ word, example, note, date });
+      localStorage.setItem('vocabulary_notebook', JSON.stringify(vocab));
+    }
+    return text.replace(/\[SAVE_WORD:[^\]]+\]/gi, '').trim();
   }
 
   function appendMessage(from, text) {
@@ -1819,7 +1960,7 @@
 
   function renderVocab() {
     const body  = document.getElementById('vocab-body');
-    const words = JSON.parse(localStorage.getItem('parla_vocab') || 'null') || DEMO_WORDS;
+    const words = JSON.parse(localStorage.getItem('vocabulary_notebook') || 'null') || DEMO_WORDS;
 
     if (!words.length) {
       body.innerHTML = `
@@ -1872,8 +2013,8 @@
     nav('home-screen');
 
     // seed demo vocab if none saved
-    if (!localStorage.getItem('parla_vocab')) {
-      localStorage.setItem('parla_vocab', JSON.stringify(DEMO_WORDS));
+    if (!localStorage.getItem('vocabulary_notebook')) {
+      localStorage.setItem('vocabulary_notebook', JSON.stringify(DEMO_WORDS));
     }
   })();
 </script>
