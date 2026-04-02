@@ -1613,7 +1613,7 @@
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          setTimeout(() => startListening(), 500);
+          setTimeout(() => startListening(), 600);
         } else {
           sessionState = 'idle';
           applyState();
@@ -1671,6 +1671,16 @@
       return;
     }
 
+    // Fully destroy any lingering instance before creating a new one
+    if (recognition) {
+      recognition.onresult   = null;
+      recognition.onspeechend = null;
+      recognition.onend      = null;
+      recognition.onerror    = null;
+      try { recognition.abort(); } catch {}
+      recognition = null;
+    }
+
     accumTranscript = '';
 
     // Interim bubble
@@ -1686,13 +1696,15 @@
     sessionState = 'listening';
     applyState();
 
+    // Always create a brand-new instance — iOS won't reliably restart an old one
     recognition = new SR();
     recognition.lang            = 'en-US';
     recognition.continuous      = false;
     recognition.interimResults  = true;
     recognition.maxAlternatives = 1;
 
-    recognition.onresult = (e) => {
+    // Named handlers so they can be cleanly detached
+    recognition.onresult = function onSRResult(e) {
       let interim = '';
       let final   = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -1703,7 +1715,6 @@
 
       accumTranscript = final || interim;
 
-      // Update interim bubble
       const bubble = interimEl?.querySelector('.conv-bubble');
       if (bubble) {
         bubble.textContent = accumTranscript;
@@ -1711,7 +1722,6 @@
       }
       log.scrollTop = log.scrollHeight;
 
-      // On final result, stop — no need to wait for silence timer
       if (final) {
         clearTimeout(silenceTimer);
         silenceTimer = null;
@@ -1719,21 +1729,19 @@
         return;
       }
 
-      // Interim: reset silence timer
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         try { recognition.stop(); } catch {}
       }, getPauseSensitivityMs());
     };
 
-    // iOS: onspeechend fires when speech stops but before final result
-    recognition.onspeechend = () => {
+    recognition.onspeechend = function onSRSpeechEnd() {
       clearTimeout(silenceTimer);
       silenceTimer = null;
       try { recognition.stop(); } catch {}
     };
 
-    recognition.onend = () => {
+    recognition.onend = function onSREnd() {
       clearTimeout(silenceTimer);
       silenceTimer = null;
       recognition = null;
@@ -1747,18 +1755,15 @@
       if (transcript) {
         onSpeechResult(transcript);
       } else {
-        // Nothing heard — remove empty interim bubble and listen again
         if (interimEl) { interimEl.remove(); interimEl = null; }
-        setTimeout(() => startListening(), 400);
+        setTimeout(() => startListening(), 600);
       }
     };
 
-    recognition.onerror = (e) => {
+    recognition.onerror = function onSRError(e) {
       clearTimeout(silenceTimer);
       silenceTimer = null;
       if (interimEl) { interimEl.remove(); interimEl = null; }
-      // onend will still fire after onerror, so we set recognition=null here
-      // to prevent double-processing in onend
       recognition = null;
 
       if (!sessionActive) return;
@@ -1768,16 +1773,14 @@
         endSession();
         return;
       }
-      // no-speech, aborted, network — restart after a short pause
-      setTimeout(() => startListening(), 500);
+      setTimeout(() => startListening(), 600);
     };
 
     try {
       recognition.start();
     } catch (err) {
-      // Already started or other edge case — retry
       if (interimEl) { interimEl.remove(); interimEl = null; }
-      setTimeout(() => startListening(), 500);
+      setTimeout(() => startListening(), 600);
     }
   }
 
