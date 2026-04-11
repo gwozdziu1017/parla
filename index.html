@@ -1554,6 +1554,23 @@
   /* ================================ */
   /* TTS                              */
   /* ================================ */
+  async function releaseAudioSession() {
+    // Stop and reset global audio element
+    audioPlayer.pause();
+    audioPlayer.src = '';
+    audioPlayer.load();
+
+    // Create and immediately suspend an AudioContext to reset iOS audio session
+    try {
+      const ctx = new AudioContext();
+      await ctx.resume();
+      await ctx.close();
+    } catch(e) {}
+
+    // Give iOS time to switch from playback to record mode
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
   async function speak(text) {
     const apiKey = localStorage.getItem('openai_api_key') || '';
     console.log('[Parla] Reading OpenAI key from localStorage key "openai_api_key":', apiKey ? `sk-...${apiKey.slice(-4)}` : '(empty)');
@@ -1613,10 +1630,7 @@
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          // Release iOS audio session before starting mic
-          audioPlayer.src = '';
-          audioPlayer.load();
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          await releaseAudioSession();
           startListening();
         } else {
           sessionState = 'idle';
