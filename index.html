@@ -1312,6 +1312,28 @@
   let conversationHistory  = [];       // [{role, content}] sent to Claude
   let firstTurn            = true;     // skip releaseAudioSession after greeting
   let audioContext         = null;
+  let wakeLock             = null;
+
+  async function requestWakeLock() {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) {
+      console.log('WakeLock not supported:', e);
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release();
+      wakeLock = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && sessionActive) {
+      await requestWakeLock();
+    }
+  });
 
   /* ================================ */
   /* NAVIGATION                       */
@@ -1478,6 +1500,7 @@
 
   function endSession() {
     sessionActive = false;
+    releaseWakeLock();
     stopListening();
     stopAudio();
     sessionStarted = false;
@@ -1497,6 +1520,7 @@
 
       sessionStarted = true;
       sessionActive  = true;
+      requestWakeLock();
       speak(TUTORS[activeTutor].greeting);
     }
   }
@@ -1702,11 +1726,11 @@
         return;
       }
 
-      // Interim: reset silence timer
+      // Interim: reset silence timer with extra buffer so words don't get cut off
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         try { recognition.stop(); } catch {}
-      }, getPauseSensitivityMs());
+      }, getPauseSensitivityMs() + 1000);
     };
 
     recognition.onend = () => {
