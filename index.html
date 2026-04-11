@@ -1560,7 +1560,7 @@
     audioPlayer.pause();
     audioPlayer.src = '';
     audioPlayer.load();
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
   async function speak(text) {
@@ -1624,7 +1624,7 @@
         if (sessionActive) {
           if (firstTurn) {
             firstTurn = false;
-            startListening();
+            setTimeout(() => startListening(), 3000);
           } else {
             await releaseAudioSession();
             startListening();
