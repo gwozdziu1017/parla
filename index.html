@@ -1709,14 +1709,6 @@
       }, getPauseSensitivityMs());
     };
 
-    // iOS: onspeechend fires too early — delay stop to let final result arrive
-    recognition.onspeechend = () => {
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => {
-        try { recognition.stop(); } catch {}
-      }, 1500);
-    };
-
     recognition.onend = () => {
       clearTimeout(silenceTimer);
       silenceTimer = null;
