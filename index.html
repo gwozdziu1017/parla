@@ -1557,19 +1557,9 @@
   /* TTS                              */
   /* ================================ */
   async function releaseAudioSession() {
-    // Stop and reset global audio element
     audioPlayer.pause();
     audioPlayer.src = '';
     audioPlayer.load();
-
-    // Create and immediately suspend an AudioContext to reset iOS audio session
-    try {
-      const ctx = new AudioContext();
-      await ctx.resume();
-      await ctx.close();
-    } catch(e) {}
-
-    // Give iOS time to switch from playback to record mode
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
