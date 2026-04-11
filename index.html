@@ -1305,16 +1305,13 @@
   let sessionStarted       = false;
   let sessionActive        = false;    // false = loop should stop
   let sessionCost          = 0;
-  let currentAudio         = null;     // points to audioPlayer when playing, null otherwise
   let recognition          = null;
   let silenceTimer         = null;
   let interimEl            = null;
   let accumTranscript      = '';
   let conversationHistory  = [];       // [{role, content}] sent to Claude
   let firstTurn            = true;     // skip releaseAudioSession after greeting
-
-  // Single Audio element created at load time so iOS gesture unlock persists
-  const audioPlayer = new Audio();
+  let audioContext         = null;
 
   /* ================================ */
   /* NAVIGATION                       */
@@ -1494,10 +1491,9 @@
     if (sessionState === 'loading' || sessionState === 'speaking' || sessionState === 'listening') return;
 
     if (!sessionStarted) {
-      // Unlock audio on iOS — must happen synchronously inside the gesture handler
-      audioPlayer.play().catch(() => {});
-      audioPlayer.pause();
-      audioPlayer.currentTime = 0;
+      // Unlock AudioContext on iOS — must happen synchronously inside the gesture handler
+      const ctx = getAudioContext();
+      ctx.resume().catch(() => {});
 
       sessionStarted = true;
       sessionActive  = true;
@@ -1556,50 +1552,17 @@
   /* ================================ */
   /* TTS                              */
   /* ================================ */
-  async function releaseAudioSession() {
-    audioPlayer.pause();
-    audioPlayer.src = '';
-    audioPlayer.load();
-    await new Promise(resolve => setTimeout(resolve, 3000));
+  function getAudioContext() {
+    if (!audioContext || audioContext.state === 'closed') {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioContext;
   }
 
-  // TEMPORARY: speechSynthesis version for testing — OpenAI TTS commented out below
-  function speak(text) {
-    appendMessage('tutor', text);
-    sessionState = 'speaking';
-    applyState();
-
-    return new Promise((resolve) => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 1;
-      utterance.onend = async () => {
-        if (sessionActive) {
-          if (firstTurn) {
-            firstTurn = false;
-            setTimeout(() => startListening(), 3000);
-          } else {
-            await releaseAudioSession();
-            startListening();
-          }
-        } else {
-          sessionState = 'idle';
-          applyState();
-        }
-        resolve();
-      };
-      window.speechSynthesis.speak(utterance);
-    });
-  }
-
-  /*
-  // OpenAI TTS — restore when speechSynthesis testing is done
   async function speak(text) {
-    const apiKey = localStorage.getItem('openai_api_key') || '';
-    console.log('[Parla] Reading OpenAI key from localStorage key "openai_api_key":', apiKey ? `sk-...${apiKey.slice(-4)}` : '(empty)');
-
-    if (!apiKey) {
-      alert('Please add your OpenAI API key in Settings first.');
+    const openaiKey = localStorage.getItem('openai_api_key')?.trim();
+    if (!openaiKey) {
+      alert('Please add your OpenAI API key in Settings.');
       sessionStarted = false;
       return;
     }
@@ -1611,13 +1574,13 @@
       const response = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${openaiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: 'tts-1',
-          input: text,
           voice: TUTORS[activeTutor].voice,
+          input: text,
         }),
       });
 
@@ -1627,77 +1590,50 @@
         throw new Error(msg);
       }
 
-      // Explicit type so iOS doesn't have to guess the codec
-      const blob = new Blob([await response.arrayBuffer()], { type: 'audio/mpeg' });
-      const url  = URL.createObjectURL(blob);
-
       // Track cost: $15 per 1M characters
       addCost(text.length * 15 / 1_000_000);
 
-      // Append to conversation log
       appendMessage('tutor', text);
-
-      // Play via the pre-unlocked global audioPlayer
       sessionState = 'speaking';
       applyState();
 
-      // iOS: onended is unreliable. Use a flag so only the first of
-      // onended / fallback timer triggers the next listening cycle.
-      let listenerStarted = false;
-      const afterSpeech = async () => {
-        if (listenerStarted) return;
-        listenerStarted = true;
-        clearTimeout(audioFallbackTimer);
-        audioPlayer.onended = null;
-        audioPlayer.onerror = null;
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        if (sessionActive) {
-          if (firstTurn) {
-            firstTurn = false;
-            setTimeout(() => startListening(), 3000);
-          } else {
-            await releaseAudioSession();
-            startListening();
-          }
-        } else {
-          sessionState = 'idle';
-          applyState();
-        }
-      };
+      const arrayBuffer = await response.arrayBuffer();
+      const ctx = getAudioContext();
 
-      audioPlayer.onended = afterSpeech;
-      audioPlayer.onerror = () => {
-        listenerStarted = true;
-        clearTimeout(audioFallbackTimer);
-        audioPlayer.onended = null;
-        audioPlayer.onerror = null;
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        sessionState = 'idle';
-        applyState();
-      };
+      // iOS requires explicit resume after context creation or suspension
+      if (ctx.state === 'suspended') await ctx.resume();
 
-      // Fallback: ~80ms per character + 500ms tail buffer
-      const estimatedMs = text.length * 80 + 500;
-      const audioFallbackTimer = setTimeout(afterSpeech, estimatedMs);
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
-      audioPlayer.src = url;
-      currentAudio = audioPlayer;
-      console.log('[Parla] speak() playing via audioPlayer, text length:', text.length);
-      audioPlayer.play().catch(err => {
-        console.error('[Parla] audioPlayer.play() rejected:', err);
-        afterSpeech();
+      await new Promise((resolve) => {
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        source.onended = () => {
+          // Suspend context after playback — releases iOS audio session for mic
+          ctx.suspend().then(resolve);
+        };
+        source.start(0);
       });
 
+      // Playback finished — transition to next turn
+      if (sessionActive) {
+        if (firstTurn) {
+          firstTurn = false;
+          setTimeout(() => startListening(), 3000);
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          startListening();
+        }
+      } else {
+        sessionState = 'idle';
+        applyState();
+      }
+
     } catch (err) {
-      sessionState = 'idle';
-      sessionStarted = false;
-      applyState();
-      alert('TTS failed: ' + err.message);
+      speak('Sorry, I had a problem connecting. The error was: ' + err.message);
     }
   }
-  */
 
   /* ================================ */
   /* SPEECH RECOGNITION (STT)         */
@@ -1839,11 +1775,9 @@
   }
 
   function stopAudio() {
-    audioPlayer.onended = null;
-    audioPlayer.onerror = null;
-    try { audioPlayer.pause(); } catch {}
-    audioPlayer.src = '';
-    currentAudio = null;
+    if (audioContext && audioContext.state !== 'closed') {
+      try { audioContext.suspend(); } catch {}
+    }
   }
 
   async function onSpeechResult(transcript) {
