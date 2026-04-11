@@ -1604,7 +1604,7 @@
       // iOS: onended is unreliable. Use a flag so only the first of
       // onended / fallback timer triggers the next listening cycle.
       let listenerStarted = false;
-      const afterSpeech = () => {
+      const afterSpeech = async () => {
         if (listenerStarted) return;
         listenerStarted = true;
         clearTimeout(audioFallbackTimer);
@@ -1613,7 +1613,11 @@
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          setTimeout(() => startListening(), 1500);
+          // Release iOS audio session before starting mic
+          audioPlayer.src = '';
+          audioPlayer.load();
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          startListening();
         } else {
           sessionState = 'idle';
           applyState();
