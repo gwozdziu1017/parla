@@ -1563,6 +1563,37 @@
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
+  // TEMPORARY: speechSynthesis version for testing — OpenAI TTS commented out below
+  function speak(text) {
+    appendMessage('tutor', text);
+    sessionState = 'speaking';
+    applyState();
+
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 1;
+      utterance.onend = async () => {
+        if (sessionActive) {
+          if (firstTurn) {
+            firstTurn = false;
+            setTimeout(() => startListening(), 3000);
+          } else {
+            await releaseAudioSession();
+            startListening();
+          }
+        } else {
+          sessionState = 'idle';
+          applyState();
+        }
+        resolve();
+      };
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  /*
+  // OpenAI TTS — restore when speechSynthesis testing is done
   async function speak(text) {
     const apiKey = localStorage.getItem('openai_api_key') || '';
     console.log('[Parla] Reading OpenAI key from localStorage key "openai_api_key":', apiKey ? `sk-...${apiKey.slice(-4)}` : '(empty)');
@@ -1666,6 +1697,7 @@
       alert('TTS failed: ' + err.message);
     }
   }
+  */
 
   /* ================================ */
   /* SPEECH RECOGNITION (STT)         */
