@@ -1773,7 +1773,9 @@
     };
 
     try {
-      recognition.start();
+      setTimeout(() => {
+        recognition.start();
+      }, 1000);
     } catch (err) {
       // Already started or other edge case — retry
       if (interimEl) { interimEl.remove(); interimEl = null; }
