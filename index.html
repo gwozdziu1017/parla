@@ -1311,6 +1311,7 @@
   let interimEl            = null;
   let accumTranscript      = '';
   let conversationHistory  = [];       // [{role, content}] sent to Claude
+  let firstTurn            = true;     // skip releaseAudioSession after greeting
 
   // Single Audio element created at load time so iOS gesture unlock persists
   const audioPlayer = new Audio();
@@ -1465,6 +1466,7 @@
     sessionStarted      = false;
     sessionCost         = 0;
     conversationHistory = [];
+    firstTurn           = true;
     stopListening();
     stopAudio();
     sessionState = 'idle';
@@ -1630,8 +1632,13 @@
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          await releaseAudioSession();
-          startListening();
+          if (firstTurn) {
+            firstTurn = false;
+            startListening();
+          } else {
+            await releaseAudioSession();
+            startListening();
+          }
         } else {
           sessionState = 'idle';
           applyState();
