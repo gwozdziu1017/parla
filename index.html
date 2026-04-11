@@ -1613,7 +1613,7 @@
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          setTimeout(() => startListening(), 500);
+          setTimeout(() => startListening(), 1500);
         } else {
           sessionState = 'idle';
           applyState();
