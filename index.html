@@ -1613,7 +1613,7 @@
         URL.revokeObjectURL(url);
         currentAudio = null;
         if (sessionActive) {
-          setTimeout(() => startListening(), 600);
+          setTimeout(() => startListening(), 500);
         } else {
           sessionState = 'idle';
           applyState();
@@ -1664,55 +1664,131 @@
   function startListening() {
     if (!sessionActive) return;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.log('[Parla] Speech recognition not supported');
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Speech recognition is not supported on this browser.');
+      endSession();
       return;
     }
+
+    accumTranscript = '';
+
+    // Interim bubble
+    const log = document.getElementById('conv-log');
+    const empty = document.getElementById('conv-empty');
+    if (empty) empty.remove();
+    interimEl = document.createElement('div');
+    interimEl.className = 'conv-msg user';
+    interimEl.innerHTML = '<div class="conv-bubble conv-bubble-interim">\u00a0</div>';
+    log.appendChild(interimEl);
+    log.scrollTop = log.scrollHeight;
 
     sessionState = 'listening';
     applyState();
 
-    // Fresh instance every turn — iOS won't reliably reuse an existing object
-    const recognition = new SpeechRecognition();
-    recognition.continuous     = false;
-    recognition.interimResults = false;
-    recognition.lang           = 'en-US';
+    recognition = new SR();
+    recognition.lang            = 'en-US';
+    recognition.continuous      = false;
+    recognition.interimResults  = true;
+    recognition.maxAlternatives = 1;
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript.trim()) {
-        onSpeechResult(transcript.trim());
+    recognition.onresult = (e) => {
+      let interim = '';
+      let final   = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) { final += t; }
+        else                      { interim += t; }
+      }
+
+      accumTranscript = final || interim;
+
+      // Update interim bubble
+      const bubble = interimEl?.querySelector('.conv-bubble');
+      if (bubble) {
+        bubble.textContent = accumTranscript;
+        bubble.classList.toggle('conv-bubble-interim', !final);
+      }
+      log.scrollTop = log.scrollHeight;
+
+      // On final result, stop — no need to wait for silence timer
+      if (final) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+        try { recognition.stop(); } catch {}
+        return;
+      }
+
+      // Interim: reset silence timer
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        try { recognition.stop(); } catch {}
+      }, getPauseSensitivityMs());
+    };
+
+    // iOS: onspeechend fires when speech stops but before final result
+    recognition.onspeechend = () => {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+      try { recognition.stop(); } catch {}
+    };
+
+    recognition.onend = () => {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+      recognition = null;
+
+      if (!sessionActive) {
+        if (interimEl) { interimEl.remove(); interimEl = null; }
+        return;
+      }
+
+      const transcript = accumTranscript.trim();
+      if (transcript) {
+        onSpeechResult(transcript);
+      } else {
+        // Nothing heard — remove empty interim bubble and listen again
+        if (interimEl) { interimEl.remove(); interimEl = null; }
+        setTimeout(() => startListening(), 400);
       }
     };
 
-    recognition.onerror = (event) => {
-      console.log('[Parla] Recognition error:', event.error);
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+    recognition.onerror = (e) => {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+      if (interimEl) { interimEl.remove(); interimEl = null; }
+      // onend will still fire after onerror, so we set recognition=null here
+      // to prevent double-processing in onend
+      recognition = null;
+
+      if (!sessionActive) return;
+
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         alert('Microphone access denied. Please allow microphone access in your browser settings, then try again.');
         endSession();
         return;
       }
-      if (sessionActive) {
-        setTimeout(startListening, 1000);
-      }
+      // no-speech, aborted, network — restart after a short pause
+      setTimeout(() => startListening(), 500);
     };
 
-    recognition.onend = () => {
-      // If no result was captured and session is still in listening state, restart
-      if (sessionActive && sessionState === 'listening') {
-        setTimeout(startListening, 500);
-      }
-    };
-
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (err) {
+      // Already started or other edge case — retry
+      if (interimEl) { interimEl.remove(); interimEl = null; }
+      setTimeout(() => startListening(), 500);
+    }
   }
 
   function stopListening() {
     clearTimeout(silenceTimer);
     silenceTimer = null;
+    if (recognition) {
+      try { recognition.abort(); } catch {}
+      recognition = null;
+    }
     if (interimEl) { interimEl.remove(); interimEl = null; }
-    // recognition is local to each startListening() call — nothing to abort here
   }
 
   function stopAudio() {
@@ -1724,6 +1800,8 @@
   }
 
   async function onSpeechResult(transcript) {
+    if (interimEl) { interimEl.remove(); interimEl = null; }
+
     appendMessage('user', transcript);
 
     sessionState = 'loading';
