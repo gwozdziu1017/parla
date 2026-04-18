@@ -1662,9 +1662,11 @@
       openaiKey:    document.getElementById('openai-key')?.value    || '',
     };
     localStorage.setItem('parla_settings', JSON.stringify(data));
-    // Also store API keys as standalone keys for direct lookup
-    localStorage.setItem('openai_api_key',    data.openaiKey);
-    localStorage.setItem('anthropic_api_key', data.anthropicKey);
+    // Only overwrite standalone API key entries when the user has actually typed a value.
+    // This prevents any other persist() call (theme change, slider, etc.) from
+    // accidentally wiping keys that were stored in a previous session.
+    if (data.anthropicKey) localStorage.setItem('anthropic_api_key', data.anthropicKey);
+    if (data.openaiKey)    localStorage.setItem('openai_api_key',    data.openaiKey);
   }
 
   function restore() {
