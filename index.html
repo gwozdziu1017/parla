@@ -1371,7 +1371,7 @@
             <div class="settings-row-label">Speech pause sensitivity</div>
             <div class="settings-row-sub">How long Parla waits after you stop speaking</div>
             <div class="slider-wrap">
-              <input type="range" id="pause-slider" min="15" max="30" value="15" step="5"
+              <input type="range" id="pause-slider" min="20" max="30" value="20" step="5"
                 oninput="onSlider(this)">
               <span class="slider-val" id="pause-val">1.0s</span>
             </div>
@@ -1704,7 +1704,7 @@
 
     const data = {
       nativeLang:   document.getElementById('native-lang')?.value || '',
-      pauseVal:     slider?.value || '15',
+      pauseVal:     slider?.value || '20',
       corrStyle:    activeCorr?.dataset.corr || 'brief',
       anthropicKey: document.getElementById('anthropic-key')?.value || '',
       openaiKey:    document.getElementById('openai-key')?.value    || '',
@@ -1944,8 +1944,8 @@
   /* ================================ */
   function getPauseSensitivityMs() {
     const settings = JSON.parse(localStorage.getItem('parla_settings') || '{}');
-    const raw = parseFloat(settings.pauseVal || '10');
-    return (raw / 10) * 1000; // e.g. 10 → 1000ms, 5 → 500ms
+    const raw = parseFloat(settings.pauseVal || '20');
+    return (raw / 10) * 1000; // e.g. 20 → 2000ms, 30 → 3000ms
   }
 
   function startListening() {
@@ -1998,6 +1998,14 @@
       }
       log.scrollTop = log.scrollHeight;
 
+      // EOT keyword — end turn immediately regardless of final/interim
+      if (/\beot\b/i.test(accumTranscript)) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+        try { recognition.stop(); } catch {}
+        return;
+      }
+
       // On final result, stop — no need to wait for silence timer
       if (final) {
         clearTimeout(silenceTimer);
@@ -2023,11 +2031,13 @@
         return;
       }
 
-      const transcript = accumTranscript.trim();
+      const transcript = accumTranscript
+        .replace(/[,.]?\s*\beot\b\s*[,.]?/gi, ' ')
+        .trim();
       if (transcript) {
         onSpeechResult(transcript);
       } else {
-        // Nothing heard — remove empty interim bubble and listen again
+        // Nothing heard (or only EOT) — remove empty interim bubble and listen again
         if (interimEl) { interimEl.remove(); interimEl = null; }
         setTimeout(() => startListening(), 400);
       }
