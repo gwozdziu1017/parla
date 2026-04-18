@@ -403,31 +403,6 @@
       opacity: 1;
     }
 
-    /* Formality slider — 5-step */
-    .formality-wrap { padding: 14px 20px 4px; }
-
-    .slider-steps {
-      display: flex;
-      justify-content: space-between;
-      padding: 7px 11px 0; /* 11px = half thumb width, aligns labels under thumb centers */
-    }
-
-    .slider-step-label {
-      flex: 1;
-      text-align: center;
-      font-size: 9.5px;
-      font-weight: 500;
-      color: var(--text-muted);
-      line-height: 1.35;
-      white-space: normal;
-      padding: 0 2px;
-    }
-
-    .slider-step-label.active {
-      color: var(--accent);
-      font-weight: 600;
-    }
-
     /* Guided note */
     .guided-note {
       margin: 10px 20px 4px;
@@ -1281,20 +1256,6 @@
         </div>
       </div>
 
-      <!-- Formality slider: teacher / mate / debate / custom -->
-      <div class="home-collapsible open" id="formality-section">
-        <div class="formality-wrap">
-          <input type="range" id="formality-slider" min="0" max="4" step="1" value="2"
-            oninput="onFormalitySlider(this)">
-          <div class="slider-steps" id="slider-steps">
-            <span class="slider-step-label" data-step="0">Chill<br>mate</span>
-            <span class="slider-step-label" data-step="1">Friendly<br>foreigner</span>
-            <span class="slider-step-label active" data-step="2">Average<br>Joe</span>
-            <span class="slider-step-label" data-step="3">Language<br>passionate</span>
-            <span class="slider-step-label" data-step="4">Teacher</span>
-          </div>
-        </div>
-      </div>
 
       <!-- Guided note: guided only -->
       <div class="home-collapsible" id="guided-section">
@@ -1558,7 +1519,6 @@
   // Home screen selections — in-memory only, reset each app load
   let activeTutor          = 'grace';
   let selectedPersonality  = 'mate';   // teacher | mate | debate | guided | custom
-  let formalityLevel       = 2;        // 0=Chill mate … 4=Teacher (unused in guided)
   let customTutorDesc      = '';
   let selectedLevel        = 'intermediate'; // beginner | intermediate | native (always beginner in guided)
 
@@ -1632,8 +1592,6 @@
     const p = selectedPersonality;
     const isGuided = p === 'guided';
     const isCustom = p === 'custom';
-    // Show slider for everything except guided
-    setOpen('formality-section', !isGuided);
     // Show guided note only for guided
     setOpen('guided-section', isGuided);
     // Show textarea only for custom
@@ -1646,12 +1604,6 @@
     document.getElementById(id)?.classList.toggle('open', open);
   }
 
-  function onFormalitySlider(input) {
-    formalityLevel = parseInt(input.value, 10);
-    document.querySelectorAll('#slider-steps .slider-step-label').forEach(el => {
-      el.classList.toggle('active', parseInt(el.dataset.step, 10) === formalityLevel);
-    });
-  }
 
   function onCustomTutorInput(el) {
     customTutorDesc = el.value;
@@ -2093,7 +2045,7 @@
     sessionState = 'loading';
     applyState();
     try {
-      const raw = await askClaude('[NEEDS_GUIDE]');
+      const raw = await askClaude('[GUIDE_REQUEST]');
       if (!raw || !sessionActive) return;
       const cleaned = handleVocabSave(raw);
       speak(cleaned);
@@ -2134,13 +2086,9 @@
   function buildSystemPrompt() {
     const s     = JSON.parse(localStorage.getItem('parla_settings') || '{}');
     const tutor = TUTORS[activeTutor];
-    const isGuided  = selectedPersonality === 'guided';
-    const corrStyle = s.corrStyle || 'brief';
+    const isGuided = selectedPersonality === 'guided';
 
-    const levelMap = { beginner: 'Beginner', intermediate: 'Intermediate', native: 'Native-level' };
-    const level      = isGuided ? 'Beginner' : levelMap[selectedLevel] || 'Intermediate';
-    const nativeLang = s.nativeLang || (isGuided ? 'Polish' : 'not specified');
-
+    // ── GUIDED MODE ───────────────────────────────────────────────────────────
     if (isGuided) {
       return `You are ${tutor.name}, a bilingual guided English tutor in a voice app called Parla. The student is a Polish speaker who is a complete beginner in English.
 
@@ -2148,7 +2096,7 @@ GUIDED MODE RULES:
 - Speak both Polish and English in every response — use Polish to explain, English to model correct phrases
 - Keep all sentences very short and simple (A1/A2 level)
 - Always end your turn with a simple English question or prompt for the student to respond to
-- When the student sends [NEEDS_GUIDE], provide a model answer: say it clearly in English first, then briefly explain in Polish, then invite them to try
+- When the student sends [GUIDE_REQUEST], provide a model answer: say it clearly in English first, then briefly explain in Polish, then invite them to try
 - Correct mistakes very gently — show the correct form, never criticise
 - Be warm and encouraging at all times
 
@@ -2157,68 +2105,53 @@ Example response: "Good try! We say 'I am fine', not 'I am good'. (Mówimy: I am
 Respond in a mix of Polish and English as described. No markdown, no lists.`;
     }
 
-    // Non-guided: build personality from pill + formality slider
-    let personality;
-    // formalityLevel: 0=Chill mate, 1=Friendly foreigner, 2=Average Joe, 3=Language passionate, 4=Teacher
-    if (selectedPersonality === 'custom' && customTutorDesc.trim()) {
-      personality = customTutorDesc.trim();
-      if (formalityLevel === 0) {
-        personality += ' Keep the tone very casual — prioritise flow entirely, correct nothing.';
-      } else if (formalityLevel === 1) {
-        personality += ' Keep it relaxed and friendly — only correct significant mistakes.';
-      } else if (formalityLevel === 3) {
-        personality += ' Be attentive to mistakes and correct them clearly, but stay warm.';
-      } else if (formalityLevel === 4) {
-        personality += ' Be thorough and strict — correct every grammar and vocabulary mistake.';
-      }
-    } else {
-      const presetBase = {
-        teacher: "Strict but fair teacher who corrects every grammar and vocabulary mistake clearly. Focused on accuracy.",
-        mate:    "Friendly, talkative mate who asks lots of questions, shares personal stories, and naturally keeps the conversation flowing.",
-        debate:  "Opinionated debate partner who loves concrete topics, always takes the opposing view, challenges assumptions, and pushes back on weak arguments.",
-      }[selectedPersonality] || "Friendly, talkative mate";
+    // ── TUTOR IDENTITY ────────────────────────────────────────────────────────
+    const tutorBlock = `You are ${tutor.name}, an English tutor in a voice conversation app called Parla.`;
 
-      if (formalityLevel === 0) {
-        personality = presetBase + ' Lean fully casual — prioritise conversation, correct almost nothing.';
-      } else if (formalityLevel === 1) {
-        personality = presetBase + ' Keep corrections minimal — only flag mistakes that genuinely impede understanding.';
-      } else if (formalityLevel === 3) {
-        personality = presetBase + ' Actively correct grammar and phrasing mistakes — be thorough but friendly.';
-      } else if (formalityLevel === 4) {
-        personality = presetBase + ' Apply strict teacher standards — flag every mistake including minor ones.';
-      } else {
-        personality = presetBase; // level 2 = Average Joe, no modifier
-      }
+    // ── PERSONALITY BLOCK ────────────────────────────────────────────────────
+    let personalityBlock;
+    if (selectedPersonality === 'mate') {
+      personalityBlock = `You are a talkative, friendly companion. You love asking questions, sharing short stories from your own experience, and keeping the conversation light and fun. React naturally — laugh, express surprise, share opinions. Correct only serious mistakes that change meaning, maximum 1 correction per response.`;
+    } else if (selectedPersonality === 'teacher') {
+      personalityBlock = `You are a strict, precise English teacher. You care deeply about correct grammar and vocabulary. Correct every mistake — grammar, vocabulary, awkward phrasing. Explain briefly why something is wrong. Keep corrections constructive and clear.`;
+    } else if (selectedPersonality === 'debate') {
+      personalityBlock = `You are an opinionated debate partner. You always take the opposite view, challenge assumptions, push back on weak arguments, and demand evidence. Correct clear grammar mistakes but keep the debate energy high.`;
+    } else if (selectedPersonality === 'custom' && customTutorDesc.trim()) {
+      personalityBlock = `${customTutorDesc.trim()} Also correct clear grammar and vocabulary mistakes naturally as part of your responses.`;
+    } else {
+      personalityBlock = `You are a talkative, friendly companion. Correct only serious mistakes that change meaning, maximum 1 correction per response.`;
     }
 
-    const corrStyleDesc = corrStyle === 'explained'
-      ? "Explained — correct and briefly explain why, e.g. \"it's 'have been' — we use present perfect here because...\""
-      : "Brief — correct naturally in passing, e.g. \"by the way, it's 'have been', not 'have went'\"";
+    // ── LEVEL BLOCK ───────────────────────────────────────────────────────────
+    let levelBlock;
+    if (selectedLevel === 'beginner') {
+      levelBlock = `Student level: A1-A2. Use simple, short sentences. Avoid idioms and complex grammar. Maximum 1 correction per response, only for serious errors.`;
+    } else if (selectedLevel === 'native') {
+      levelBlock = `Student level: C1-C2. Rich sophisticated vocabulary is expected. Correct mistakes including subtle ones — collocations, register, awkward phrasing. Up to 3 corrections per response.`;
+    } else {
+      levelBlock = `Student level: B1-B2. Natural everyday English. Correct clear grammar and unnatural phrasing. Up to 2 corrections per response.`;
+    }
 
-    return `You are ${tutor.name}, an English tutor in a voice conversation app called Parla.
-
-Personality: ${personality}
-Student level: ${level}
-Student's native language: ${nativeLang}
-
-CONVERSATION RULES:
+    // ── SHARED RULES ──────────────────────────────────────────────────────────
+    const sharedRules = `CONVERSATION RULES:
 - Keep responses short — 2-4 sentences max, this is a voice conversation
 - Talk naturally like a real person, not a textbook
 - Never use bullet points, lists, or markdown — spoken word only
 - Continue the conversation naturally after corrections
-
-CORRECTION RULES based on level:
-- Beginner: correct only major errors that change meaning, max 1-2 per response, very gentle
-- Intermediate: correct clear grammar mistakes and unnatural phrasing, up to 2-3 per response
-- Native: correct everything including collocations and register, be thorough
-
-CORRECTION STYLE: ${corrStyleDesc}
 
 VOCABULARY:
 - If the user says "write it down" or "save that" or similar, respond with exactly this format at the end of your response: [SAVE_WORD: word | example: example sentence | note: usage note]
 - Otherwise never include that tag
 
 Respond only in plain spoken English. No formatting, no lists, no markdown.`;
+
+    return `${tutorBlock}
+
+${personalityBlock}
+
+${levelBlock}
+
+${sharedRules}`;
   }
 
   async function askClaude(userText) {
@@ -2287,7 +2220,8 @@ Respond only in plain spoken English. No formatting, no lists, no markdown.`;
     const empty = document.getElementById('conv-empty');
     if (empty) empty.remove();
 
-    const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const display = (from === 'user' && text === '[GUIDE_REQUEST]') ? 'Guide me' : text;
+    const safe = display.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const el = document.createElement('div');
     el.className = `conv-msg ${from}`;
     el.innerHTML = `<div class="conv-bubble">${safe}</div>`;
