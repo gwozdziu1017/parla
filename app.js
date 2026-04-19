@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.2.0';
 
   /* ================================ */
   /* STATE                            */
@@ -263,7 +263,8 @@
       sessionActive  = true;
       requestWakeLock();
       console.log('[Parla] onMainBtnTap — calling speak() with greeting');
-      speak(getTutorGreeting());
+      // 600ms pause before greeting so it doesn't fire instantly
+      setTimeout(() => speak(getTutorGreeting()), 600);
     }
   }
 
@@ -372,6 +373,9 @@
       addCost(text.length * 15 / 1_000_000);
 
       appendMessage('tutor', text);
+      // 400ms "thinking" pause before audio plays — feels more natural
+      await new Promise(resolve => setTimeout(resolve, 400));
+      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded during pre-play pause'); return; }
       sessionState = 'speaking';
       applyState();
 
@@ -405,12 +409,13 @@
       if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after playback (session ended)'); return; }
 
       // Playback finished — transition to next turn
+      // 200ms breath pause + 2000ms standard delay = 2200ms total before mic opens
       if (sessionActive) {
         if (firstTurn) {
           firstTurn = false;
-          setTimeout(() => startListening(), 2000);
+          setTimeout(() => startListening(), 2200);
         } else {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 2200));
           startListening();
         }
       } else {
