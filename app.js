@@ -1,3 +1,5 @@
+  const APP_VERSION = '1.1.0';
+
   /* ================================ */
   /* STATE                            */
   /* ================================ */
@@ -1123,6 +1125,8 @@ ${sharedRules}`;
     // Apply saved theme immediately to avoid flash
     const savedTheme = localStorage.getItem('parla_theme') || 'A';
     applyTheme(savedTheme);
+
+    document.getElementById('app-version').textContent = 'v' + APP_VERSION;
 
     restore();
     nav('home-screen');
