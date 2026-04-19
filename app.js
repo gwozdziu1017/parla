@@ -479,10 +479,9 @@
       // Interim: reset silence timer with extra buffer so words don't get cut off
       // Guided mode gets extra patience (5s) to let beginners think
       clearTimeout(silenceTimer);
-      const silenceMs = selectedPersonality === 'guided' ? 5000 : getPauseSensitivityMs() + 1000;
       silenceTimer = setTimeout(() => {
         try { recognition.stop(); } catch {}
-      }, silenceMs);
+      }, getSilenceThreshold(selectedPersonality));
     };
 
     recognition.onend = () => {
@@ -495,9 +494,7 @@
         return;
       }
 
-      const transcript = accumTranscript
-        .replace(/[,.]?\s*\beot\b\s*[,.]?/gi, ' ')
-        .trim();
+      const transcript = stripEOT(accumTranscript);
       if (transcript) {
         onSpeechResult(transcript);
       } else {
@@ -633,10 +630,35 @@
   /* ================================ */
   /* CLAUDE API                        */
   /* ================================ */
-  function buildSystemPrompt() {
-    const s     = JSON.parse(localStorage.getItem('parla_settings') || '{}');
-    const tutor = TUTORS[activeTutor];
-    const isGuided = selectedPersonality === 'guided';
+  // Look up a tutor's TTS voice by their display name
+  function getVoiceForTutor(name) {
+    const tutor = Object.values(TUTORS).find(t => t.name === name);
+    return tutor ? tutor.voice : null;
+  }
+
+  // Extract EOT keyword from a transcript (pure function, testable)
+  function stripEOT(transcript) {
+    return transcript.replace(/[,.]?\s*\beot\b\s*[,.]?/gi, ' ').trim();
+  }
+
+  // Return silence threshold ms for a given personality (testable)
+  function getSilenceThreshold(personality) {
+    return personality === 'guided' ? 5000 : getPauseSensitivityMs() + 1000;
+  }
+
+  // Simple getters/setters for session state (needed for testing)
+  function getSessionState() { return sessionState; }
+  function setSessionState(state) { sessionState = state; }
+
+  // Accept optional params so tests can call it without touching globals
+  function buildSystemPrompt(tutorNameParam, personalityParam, levelParam, customDescParam) {
+    const personality = personalityParam !== undefined ? personalityParam : selectedPersonality;
+    const level       = levelParam       !== undefined ? levelParam       : selectedLevel;
+    const customDesc  = customDescParam  !== undefined ? customDescParam  : customTutorDesc;
+    const tutor = tutorNameParam !== undefined
+      ? (Object.values(TUTORS).find(t => t.name === tutorNameParam) || TUTORS[activeTutor])
+      : TUTORS[activeTutor];
+    const isGuided = personality === 'guided';
 
     // ── GUIDED MODE ───────────────────────────────────────────────────────────
     if (isGuided) {
@@ -660,23 +682,23 @@ Respond in a mix of Polish and English as described. No markdown, no lists.`;
 
     // ── PERSONALITY BLOCK ────────────────────────────────────────────────────
     let personalityBlock;
-    if (selectedPersonality === 'mate') {
+    if (personality === 'mate') {
       personalityBlock = `You are a talkative, friendly companion. You love asking questions, sharing short stories from your own experience, and keeping the conversation light and fun. React naturally — laugh, express surprise, share opinions. Correct only serious mistakes that change meaning, maximum 1 correction per response.`;
-    } else if (selectedPersonality === 'teacher') {
+    } else if (personality === 'teacher') {
       personalityBlock = `You are a strict, precise English teacher. You care deeply about correct grammar and vocabulary. Correct every mistake — grammar, vocabulary, awkward phrasing. Explain briefly why something is wrong. Keep corrections constructive and clear.`;
-    } else if (selectedPersonality === 'debate') {
+    } else if (personality === 'debate') {
       personalityBlock = `You are an opinionated debate partner. You always take the opposite view, challenge assumptions, push back on weak arguments, and demand evidence. Correct clear grammar mistakes but keep the debate energy high.`;
-    } else if (selectedPersonality === 'custom' && customTutorDesc.trim()) {
-      personalityBlock = `${customTutorDesc.trim()} Also correct clear grammar and vocabulary mistakes naturally as part of your responses.`;
+    } else if (personality === 'custom' && customDesc.trim()) {
+      personalityBlock = `${customDesc.trim()} Also correct clear grammar and vocabulary mistakes naturally as part of your responses.`;
     } else {
       personalityBlock = `You are a talkative, friendly companion. Correct only serious mistakes that change meaning, maximum 1 correction per response.`;
     }
 
     // ── LEVEL BLOCK ───────────────────────────────────────────────────────────
     let levelBlock;
-    if (selectedLevel === 'beginner') {
+    if (level === 'beginner') {
       levelBlock = `Student level: A1-A2. Use simple, short sentences. Avoid idioms and complex grammar. Maximum 1 correction per response, only for serious errors.`;
-    } else if (selectedLevel === 'native') {
+    } else if (level === 'native') {
       levelBlock = `Student level: C1-C2. Rich sophisticated vocabulary is expected. Correct mistakes including subtle ones — collocations, register, awkward phrasing. Up to 3 corrections per response.`;
     } else {
       levelBlock = `Student level: B1-B2. Natural everyday English. Correct clear grammar and unnatural phrasing. Up to 2 corrections per response.`;
@@ -1070,6 +1092,9 @@ ${sharedRules}`;
   /* INIT                             */
   /* ================================ */
   (function init() {
+    // Skip DOM-dependent setup when loaded in test context
+    if (typeof window !== 'undefined' && window.__PARLA_TEST__) return;
+
     // Apply saved theme immediately to avoid flash
     const savedTheme = localStorage.getItem('parla_theme') || 'A';
     applyTheme(savedTheme);
