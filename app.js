@@ -44,6 +44,8 @@
   let conversationHistory  = [];       // [{role, content}] sent to Claude
   let firstTurn            = true;     // skip releaseAudioSession after greeting
   let audioContext         = null;
+  let currentAudioSource   = null;     // currently playing BufferSourceNode
+  let currentSessionId     = 0;        // incremented each session; async callbacks check this to discard stale audio
   let wakeLock             = null;
 
   async function requestWakeLock() {
@@ -215,14 +217,15 @@
     const roleLabels = { teacher: 'Teacher', mate: 'Mate', debate: 'Debate Partner', guided: 'Guided · Bilingual', custom: 'Custom tutor' };
     document.getElementById('sess-role').textContent = roleLabels[selectedPersonality] || selectedPersonality;
 
-    // reset session state
+    // reset session state — stop any in-flight audio first
+    currentSessionId++;
+    stopAudio();
     sessionActive       = false;
     sessionStarted      = false;
     sessionCost         = 0;
     conversationHistory = [];
     firstTurn           = true;
     stopListening();
-    stopAudio();
     sessionState = 'idle';
     applyState();
     updateCostDisplay();
@@ -234,6 +237,7 @@
   }
 
   function endSession() {
+    currentSessionId++;
     sessionActive = false;
     releaseWakeLock();
     stopListening();
@@ -256,6 +260,7 @@
       sessionStarted = true;
       sessionActive  = true;
       requestWakeLock();
+      console.log('[Parla] onMainBtnTap — calling speak() with greeting');
       speak(getTutorGreeting());
     }
   }
@@ -326,6 +331,7 @@
   }
 
   async function speak(text) {
+    const mySessionId = currentSessionId; // capture — used to detect stale callbacks
     const openaiKey = localStorage.getItem('openai_api_key')?.trim();
     if (!openaiKey) {
       alert('Please add your OpenAI API key in Settings.');
@@ -335,6 +341,8 @@
 
     sessionState = 'loading';
     applyState();
+
+    console.log('[Parla] speak() called:', text.slice(0, 60));
 
     try {
       const response = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -350,6 +358,8 @@
         }),
       });
 
+      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded (session ended)'); return; }
+
       if (!response.ok) {
         let msg = `API error ${response.status}`;
         try { const e = await response.json(); msg = e.error?.message || msg; } catch {}
@@ -364,23 +374,33 @@
       applyState();
 
       const arrayBuffer = await response.arrayBuffer();
+      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after fetch (session ended)'); return; }
+
       const ctx = getAudioContext();
 
-      // iOS requires explicit resume after context creation or suspension
-      if (ctx.state === 'suspended') await ctx.resume();
+      // Always resume — context may be suspended from previous session cleanup or iOS init
+      console.log('[Parla] AudioContext state before resume:', ctx.state);
+      await ctx.resume();
+      console.log('[Parla] AudioContext state after resume:', ctx.state);
 
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after decode (session ended)'); return; }
 
       await new Promise((resolve) => {
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(ctx.destination);
+        currentAudioSource = source;
         source.onended = () => {
+          if (currentAudioSource === source) currentAudioSource = null;
           // Suspend context after playback — releases iOS audio session for mic
           ctx.suspend().then(resolve);
         };
+        console.log('[Parla] Starting audio playback');
         source.start(0);
       });
+
+      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after playback (session ended)'); return; }
 
       // Playback finished — transition to next turn
       if (sessionActive) {
@@ -397,6 +417,7 @@
       }
 
     } catch (err) {
+      if (mySessionId !== currentSessionId) return; // session ended mid-error
       speak('Sorry, I had a problem connecting. The error was: ' + err.message);
     }
   }
@@ -564,6 +585,10 @@
   }
 
   function stopAudio() {
+    if (currentAudioSource) {
+      try { currentAudioSource.stop(); } catch(e) {}
+      currentAudioSource = null;
+    }
     if (audioContext && audioContext.state !== 'closed') {
       try { audioContext.suspend(); } catch {}
     }
