@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.3.1';
 
   /* ================================ */
   /* STATE                            */
@@ -602,6 +602,14 @@
   }
 
   async function isCompleteSentence(transcript) {
+    // Safety: anything over 3 words is always treated as complete — avoids
+    // over-aggressive incomplete classification from the model
+    const wordCount = transcript.trim().split(/\s+/).length;
+    if (wordCount > 3) {
+      console.log('[GUIDED] Word count > 3, skipping completeness check — treating as complete');
+      return true;
+    }
+
     const apiKey = localStorage.getItem('anthropic_api_key') || '';
     if (!apiKey) return true; // fail open
     try {
@@ -616,15 +624,20 @@
         body: JSON.stringify({
           model:      'claude-sonnet-4-20250514',
           max_tokens: 5,
-          system:     'Does this sentence feel complete or unfinished? Reply with only one word: complete or incomplete.',
+          system:     'Does this English sentence feel complete or unfinished? Reply with one word only: complete or incomplete.',
           messages:   [{ role: 'user', content: transcript }],
         }),
       });
-      if (!response.ok) return true; // fail open
+      if (!response.ok) {
+        console.log('[GUIDED] Completeness check API error', response.status, '— defaulting to complete');
+        return true; // fail open
+      }
       const data = await response.json();
       const word = (data.content?.[0]?.text || '').trim().toLowerCase();
+      console.log('[GUIDED] Completeness API raw response:', JSON.stringify(word));
       return word !== 'incomplete';
-    } catch {
+    } catch (e) {
+      console.log('[GUIDED] Completeness check threw:', e.message, '— defaulting to complete');
       return true; // fail open
     }
   }
@@ -634,12 +647,16 @@
 
     // Guided mode: check if the student's sentence feels complete before sending
     if (selectedPersonality === 'guided') {
+      console.log('[GUIDED] Transcript captured:', JSON.stringify(transcript));
+      console.log('[GUIDED] Sending for completeness check...');
       const complete = await isCompleteSentence(transcript);
+      console.log('[GUIDED] Completeness result:', complete ? 'complete' : 'incomplete');
       if (!complete) {
         const prompts = ["Take your time.", "No rush, keep going.", "Do you need a moment to think?", "It's okay, take your time."];
         speak(prompts[Math.floor(Math.random() * prompts.length)]);
         return; // speak() restarts listening after playback
       }
+      console.log('[GUIDED] Sending to Claude:', JSON.stringify(transcript));
     }
 
     appendMessage('user', transcript);
