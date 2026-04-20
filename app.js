@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.3.1';
+  const APP_VERSION = '1.3.2';
 
   /* ================================ */
   /* STATE                            */
@@ -46,8 +46,9 @@
   let conversationHistory  = [];       // [{role, content}] sent to Claude
   let firstTurn            = true;     // skip releaseAudioSession after greeting
   let audioContext         = null;
-  let currentAudioSource   = null;     // currently playing BufferSourceNode
-  let currentSessionId     = 0;        // incremented each session; async callbacks check this to discard stale audio
+  let currentAudioSource      = null;  // currently playing BufferSourceNode
+  let currentSessionId        = 0;     // incremented each session; async callbacks check this to discard stale audio
+  let guideRequestInProgress  = false; // true while Guide me tap is being processed
   let wakeLock             = null;
 
   async function requestWakeLock() {
@@ -221,6 +222,7 @@
 
     // reset session state — stop any in-flight audio first
     currentSessionId++;
+    guideRequestInProgress = false;
     stopAudio();
     sessionActive       = false;
     sessionStarted      = false;
@@ -240,6 +242,7 @@
 
   function endSession() {
     currentSessionId++;
+    guideRequestInProgress = false;
     sessionActive = false;
     releaseWakeLock();
     stopListening();
@@ -517,13 +520,13 @@
       silenceTimer = null;
       recognition = null;
 
-      if (!sessionActive) {
+      if (!sessionActive || guideRequestInProgress) {
         if (interimEl) { interimEl.remove(); interimEl = null; }
         return;
       }
 
       const transcript = stripEOT(accumTranscript);
-      if (transcript) {
+      if (transcript.trim().length > 0) {
         onSpeechResult(transcript);
       } else {
         // Nothing heard (or only EOT) — remove empty interim bubble and listen again
@@ -577,16 +580,33 @@
   }
 
   async function onGuideBtn() {
-    if (!sessionActive) return;
-    stopListening();
+    if (!sessionActive || guideRequestInProgress) return;
+    guideRequestInProgress = true;
+
+    // Immediately kill mic, silence timer, and accumulated transcript so
+    // onend fires cleanly without triggering a second speech result
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+    accumTranscript = '';
+    if (recognition) {
+      try { recognition.stop(); } catch(e) {}
+    }
+
+    // Hide button immediately so it can't be double-tapped
+    const guideBtn = document.getElementById('guide-float-btn');
+    if (guideBtn) guideBtn.classList.remove('visible');
+
     sessionState = 'loading';
     applyState();
     try {
       const raw = await askClaude('[GUIDE_REQUEST]');
-      if (!raw || !sessionActive) return;
+      if (!raw || !sessionActive) { guideRequestInProgress = false; return; }
       const cleaned = handleVocabSave(raw);
+      // speak() will restart listening after playback; reset flag then
+      guideRequestInProgress = false;
       speak(cleaned);
     } catch (err) {
+      guideRequestInProgress = false;
       speak('Sorry, I had a problem. The error was: ' + err.message);
     }
   }
@@ -645,17 +665,7 @@
   async function onSpeechResult(transcript) {
     if (interimEl) { interimEl.remove(); interimEl = null; }
 
-    // Guided mode: check if the student's sentence feels complete before sending
     if (selectedPersonality === 'guided') {
-      console.log('[GUIDED] Transcript captured:', JSON.stringify(transcript));
-      console.log('[GUIDED] Sending for completeness check...');
-      const complete = await isCompleteSentence(transcript);
-      console.log('[GUIDED] Completeness result:', complete ? 'complete' : 'incomplete');
-      if (!complete) {
-        const prompts = ["Take your time.", "No rush, keep going.", "Do you need a moment to think?", "It's okay, take your time."];
-        speak(prompts[Math.floor(Math.random() * prompts.length)]);
-        return; // speak() restarts listening after playback
-      }
       console.log('[GUIDED] Sending to Claude:', JSON.stringify(transcript));
     }
 
