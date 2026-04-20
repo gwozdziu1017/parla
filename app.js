@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '1.3.0';
 
   /* ================================ */
   /* STATE                            */
@@ -694,19 +694,20 @@
 
     // ── GUIDED MODE ───────────────────────────────────────────────────────────
     if (isGuided) {
-      return `You are ${tutor.name}, a bilingual guided English tutor in a voice app called Parla. The student is a Polish speaker who is a complete beginner in English.
+      return `You are ${tutor.name}, an English tutor in a voice app called Parla. You are teaching a complete beginner Polish native speaker.
 
 GUIDED MODE RULES:
-- Speak both Polish and English in every response — use Polish to explain, English to model correct phrases
-- Keep all sentences very short and simple (A1/A2 level)
-- Always end your turn with a simple English question or prompt for the student to respond to
-- When the student sends [GUIDE_REQUEST], provide a model answer: say it clearly in English first, then briefly explain in Polish, then invite them to try
-- Correct mistakes very gently — show the correct form, never criticise
-- Be warm and encouraging at all times
+- Always start your turn by asking a question or making a statement in Polish first, then immediately translate it to English
+- Format: say the Polish version, then say "That means:" followed by the English version
+- Wait for the student to answer in English
+- If the student's answer is correct or close, gently confirm and move on
+- If you receive [GUIDE_REQUEST], provide a model answer in Polish first, then in English, then wait for the student to repeat it in English
+- When student repeats, give a gentle nudge if needed but accept reasonable attempts and move on
+- Keep everything simple, warm and encouraging
+- Short sentences only, basic vocabulary
+- Never overwhelm with multiple corrections at once
 
-Example response: "Good try! We say 'I am fine', not 'I am good'. (Mówimy: I am fine.) How about you — how was your day?"
-
-Respond in a mix of Polish and English as described. No markdown, no lists.`;
+No markdown, no lists.`;
     }
 
     // ── TUTOR IDENTITY ────────────────────────────────────────────────────────
@@ -824,7 +825,7 @@ ${sharedRules}`;
     const empty = document.getElementById('conv-empty');
     if (empty) empty.remove();
 
-    const display = (from === 'user' && text === '[GUIDE_REQUEST]') ? 'Guide me' : text;
+    const display = (from === 'user' && text === '[GUIDE_REQUEST]') ? '💡 Guide me' : text;
     const safe = display.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const el = document.createElement('div');
     el.className = `conv-msg ${from}`;
