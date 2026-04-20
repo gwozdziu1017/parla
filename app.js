@@ -1,4 +1,29 @@
-  const APP_VERSION = '1.3.2';
+  const APP_VERSION = '1.3.3';
+
+  /* ================================ */
+  /* STATE MACHINE                    */
+  /* ================================ */
+  const STATE = {
+    IDLE:          'idle',
+    LISTENING:     'listening',
+    PROCESSING:    'processing',
+    SPEAKING:      'speaking',
+    GUIDE_PENDING: 'guide_pending',
+  };
+
+  let appState = STATE.IDLE;
+
+  function setAppState(next) {
+    console.log('[STATE]', appState, '→', next);
+    appState = next;
+    // Map appState to the sessionState values applyState() reads
+    // loading is a transient visual state set directly by speak() and onGuideBtn
+    if (next === STATE.IDLE)          sessionState = 'idle';
+    else if (next === STATE.LISTENING) sessionState = 'listening';
+    else if (next === STATE.SPEAKING)  sessionState = 'speaking';
+    else if (next === STATE.PROCESSING || next === STATE.GUIDE_PENDING) sessionState = 'loading';
+    applyState();
+  }
 
   /* ================================ */
   /* STATE                            */
@@ -48,7 +73,6 @@
   let audioContext         = null;
   let currentAudioSource      = null;  // currently playing BufferSourceNode
   let currentSessionId        = 0;     // incremented each session; async callbacks check this to discard stale audio
-  let guideRequestInProgress  = false; // true while Guide me tap is being processed
   let wakeLock             = null;
 
   async function requestWakeLock() {
@@ -222,7 +246,7 @@
 
     // reset session state — stop any in-flight audio first
     currentSessionId++;
-    guideRequestInProgress = false;
+    appState = STATE.IDLE;
     stopAudio();
     sessionActive       = false;
     sessionStarted      = false;
@@ -242,7 +266,7 @@
 
   function endSession() {
     currentSessionId++;
-    guideRequestInProgress = false;
+    appState = STATE.IDLE;
     sessionActive = false;
     releaseWakeLock();
     stopListening();
@@ -345,9 +369,6 @@
       return;
     }
 
-    sessionState = 'loading';
-    applyState();
-
     console.log('[Parla] speak() called:', text.slice(0, 60));
 
     try {
@@ -379,8 +400,7 @@
       // 400ms "thinking" pause before audio plays — feels more natural
       await new Promise(resolve => setTimeout(resolve, 400));
       if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded during pre-play pause'); return; }
-      sessionState = 'speaking';
-      applyState();
+      setAppState(STATE.SPEAKING);
 
       const arrayBuffer = await response.arrayBuffer();
       if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after fetch (session ended)'); return; }
@@ -414,6 +434,7 @@
       // Playback finished — transition to next turn
       // 200ms breath pause + 2000ms standard delay = 2200ms total before mic opens
       if (sessionActive) {
+        setAppState(STATE.IDLE);
         if (firstTurn) {
           firstTurn = false;
           setTimeout(() => startListening(), 2200);
@@ -422,8 +443,7 @@
           startListening();
         }
       } else {
-        sessionState = 'idle';
-        applyState();
+        setAppState(STATE.IDLE);
       }
 
     } catch (err) {
@@ -443,6 +463,10 @@
 
   function startListening() {
     if (!sessionActive) return;
+    if (appState !== STATE.IDLE) {
+      console.log('[STATE] startListening() blocked — appState is', appState);
+      return;
+    }
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
@@ -463,8 +487,7 @@
     log.appendChild(interimEl);
     log.scrollTop = log.scrollHeight;
 
-    sessionState = 'listening';
-    applyState();
+    setAppState(STATE.LISTENING);
 
     recognition = new SR();
     recognition.lang            = 'en-US';
@@ -520,7 +543,8 @@
       silenceTimer = null;
       recognition = null;
 
-      if (!sessionActive || guideRequestInProgress) {
+      if (!sessionActive || appState === STATE.GUIDE_PENDING || appState === STATE.PROCESSING || appState === STATE.SPEAKING) {
+        console.log('[STATE] onend ignored — appState is', appState);
         if (interimEl) { interimEl.remove(); interimEl = null; }
         return;
       }
@@ -580,8 +604,8 @@
   }
 
   async function onGuideBtn() {
-    if (!sessionActive || guideRequestInProgress) return;
-    guideRequestInProgress = true;
+    if (!sessionActive || appState !== STATE.LISTENING) return;
+    setAppState(STATE.GUIDE_PENDING);
 
     // Immediately kill mic, silence timer, and accumulated transcript so
     // onend fires cleanly without triggering a second speech result
@@ -596,17 +620,14 @@
     const guideBtn = document.getElementById('guide-float-btn');
     if (guideBtn) guideBtn.classList.remove('visible');
 
-    sessionState = 'loading';
-    applyState();
+    setAppState(STATE.PROCESSING);
     try {
       const raw = await askClaude('[GUIDE_REQUEST]');
-      if (!raw || !sessionActive) { guideRequestInProgress = false; return; }
+      if (!raw || !sessionActive) { setAppState(STATE.IDLE); return; }
       const cleaned = handleVocabSave(raw);
-      // speak() will restart listening after playback; reset flag then
-      guideRequestInProgress = false;
       speak(cleaned);
     } catch (err) {
-      guideRequestInProgress = false;
+      setAppState(STATE.IDLE);
       speak('Sorry, I had a problem. The error was: ' + err.message);
     }
   }
@@ -671,8 +692,7 @@
 
     appendMessage('user', transcript);
 
-    sessionState = 'loading';
-    applyState();
+    setAppState(STATE.PROCESSING);
 
     try {
       const raw = await askClaude(transcript);
