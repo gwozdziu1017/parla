@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.5.2';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -284,21 +284,28 @@
     nav('home-screen');
   }
 
-  function onMainBtnTap() {
+  async function onMainBtnTap() {
     // Block during active states
     if (sessionState === 'loading' || sessionState === 'speaking' || sessionState === 'listening') return;
 
     if (!sessionStarted) {
-      // Unlock AudioContext on iOS — must happen synchronously inside the gesture handler
+      // Unlock AudioContext on iOS — MUST be awaited inside the gesture handler.
+      // If resume() is fire-and-forget, the context may still be suspended when
+      // source.start(0) fires inside speak(), producing no audio and hanging forever.
       const ctx = getAudioContext();
-      ctx.resume().catch(() => {});
+      console.log('[Parla] AudioContext state before gesture resume:', ctx.state);
+      try { await ctx.resume(); } catch(e) { console.warn('[Parla] ctx.resume() failed in gesture:', e); }
+      console.log('[Parla] AudioContext state after gesture resume:', ctx.state);
 
       sessionStarted = true;
       sessionActive  = true;
+      setAppState(STATE.PROCESSING); // show loading UI during TTS fetch
       requestWakeLock();
-      console.log('[Parla] onMainBtnTap — calling speak() with greeting');
       // 600ms pause before greeting so it doesn't fire instantly
-      setTimeout(() => speak(getTutorGreeting()), 600);
+      setTimeout(() => {
+        console.log('[Parla] setTimeout fired — calling speak() with greeting, appState:', appState);
+        speak(getTutorGreeting());
+      }, 600);
     }
   }
 
