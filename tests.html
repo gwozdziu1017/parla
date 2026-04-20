@@ -195,14 +195,14 @@
   /* ================================ */
   section('System prompt builder');
 
-  test('Grace maps to shimmer voice', () => {
+  test('Grace maps to fable voice', () => {
     if (typeof getVoiceForTutor !== 'function') throw new Error('getVoiceForTutor not defined');
-    assertEqual(getVoiceForTutor('Grace Fullspeak'), 'shimmer');
+    assertEqual(getVoiceForTutor('Grace Fullspeak'), 'fable');
   });
 
-  test('Ben maps to onyx voice', () => {
+  test('Ben maps to ash voice', () => {
     if (typeof getVoiceForTutor !== 'function') throw new Error('getVoiceForTutor not defined');
-    assertEqual(getVoiceForTutor('Ben Dover'), 'onyx');
+    assertEqual(getVoiceForTutor('Ben Dover'), 'ash');
   });
 
   test('System prompt contains tutor name', () => {

@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.3.3';
+  const APP_VERSION = '1.4.0';
 
   /* ================================ */
   /* STATE MACHINE                    */
@@ -36,7 +36,7 @@
     },
     grace: {
       name: 'Grace Fullspeak', role: 'Colleague', init: 'G',
-      voice: 'shimmer',
+      voice: 'fable',
       greeting: "Hey! Great to meet you. Let's just chat and I'll help you along the way.",
     },
     wayne: {
@@ -46,7 +46,7 @@
     },
     ben: {
       name: 'Ben Dover', role: 'Debate partner', init: 'B',
-      voice: 'onyx',
+      voice: 'ash',
       greeting: "So. You want to debate. Good. I hope you came prepared because I won't go easy on you.",
     },
   };
@@ -379,7 +379,7 @@
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'tts-1',
+          model: 'tts-1-hd',
           voice: TUTORS[activeTutor].voice,
           input: text,
         }),
