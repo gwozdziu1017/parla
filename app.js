@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.4.1';
 
   /* ================================ */
   /* STATE MACHINE                    */
@@ -739,6 +739,14 @@
       : TUTORS[activeTutor];
     const isGuided = personality === 'guided';
 
+    // ── BRITISH ENGLISH BLOCK ─────────────────────────────────────────────────
+    const britishBlock = `LANGUAGE STYLE:
+- Use British English vocabulary and spelling throughout
+- Say "brilliant" not "awesome", "cheers" not "thanks", "colour" not "color", "whilst" not "while", "queue" not "line", "flat" not "apartment", "lift" not "elevator", "mate" not "buddy"
+- Use British expressions naturally: "fancy a chat?", "spot on", "quite right", "rather good", "I reckon", "bloody hell" (sparingly), "sorted"
+- British spelling: -our endings (colour, favour), -ise endings (realise, organise), -re endings (centre, theatre)
+- Keep it natural — don't force every British expression into every sentence, just let it flow`;
+
     // ── GUIDED MODE ───────────────────────────────────────────────────────────
     if (isGuided) {
       return `You are ${tutor.name}, an English tutor in a voice app called Parla. You are teaching a complete beginner Polish native speaker.
@@ -753,6 +761,8 @@ GUIDED MODE RULES:
 - Keep everything simple, warm and encouraging
 - Short sentences only, basic vocabulary
 - Never overwhelm with multiple corrections at once
+
+${britishBlock}
 
 No markdown, no lists.`;
     }
@@ -802,6 +812,8 @@ Respond only in plain spoken English. No formatting, no lists, no markdown.`;
 ${personalityBlock}
 
 ${levelBlock}
+
+${britishBlock}
 
 ${sharedRules}`;
   }
