@@ -1,4 +1,10 @@
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.5.0';
+
+  const COSTS = {
+    claudeInput:  3.00  / 1_000_000,
+    claudeOutput: 15.00 / 1_000_000,
+    ttsHD:        30.00 / 1_000_000,
+  };
 
   /* ================================ */
   /* STATE MACHINE                    */
@@ -64,6 +70,7 @@
   let sessionStarted       = false;
   let sessionActive        = false;    // false = loop should stop
   let sessionCost          = 0;
+  let monthlyCost          = parseFloat(localStorage.getItem('monthly_cost') || '0');
   let recognition          = null;
   let silenceTimer         = null;
   let interimEl            = null;
@@ -174,14 +181,14 @@
   }
 
   function refreshSettingsUI() {
-    const monthly = parseFloat(localStorage.getItem('parla_monthly') || '0');
-    document.getElementById('s-monthly-cost').textContent = '$' + monthly.toFixed(3);
-    document.getElementById('s-session-cost').textContent = '$0.000';
+    document.getElementById('s-monthly-cost').textContent = '$' + monthlyCost.toFixed(4);
+    document.getElementById('s-session-cost').textContent = '$' + sessionCost.toFixed(4);
   }
 
   function resetMonthly() {
-    localStorage.setItem('parla_monthly', '0');
-    document.getElementById('s-monthly-cost').textContent = '$0.000';
+    monthlyCost = 0;
+    localStorage.setItem('monthly_cost', '0');
+    document.getElementById('s-monthly-cost').textContent = '$0.0000';
   }
 
   /* ================================ */
@@ -393,8 +400,7 @@
         throw new Error(msg);
       }
 
-      // Track cost: $15 per 1M characters
-      addCost(text.length * 15 / 1_000_000);
+      addCost(text.length * COSTS.ttsHD);
 
       appendMessage('tutor', text);
       // 400ms "thinking" pause before audio plays — feels more natural
@@ -854,9 +860,8 @@ ${sharedRules}`;
     const data       = await response.json();
     const replyText  = data.content?.[0]?.text || '';
 
-    // Cost: $3/M input tokens, $15/M output tokens
-    const inputCost  = (data.usage?.input_tokens  || 0) * 3  / 1_000_000;
-    const outputCost = (data.usage?.output_tokens || 0) * 15 / 1_000_000;
+    const inputCost  = (data.usage?.input_tokens  || 0) * COSTS.claudeInput;
+    const outputCost = (data.usage?.output_tokens || 0) * COSTS.claudeOutput;
     addCost(inputCost + outputCost);
 
     conversationHistory.push({ role: 'assistant', content: replyText });
@@ -895,13 +900,20 @@ ${sharedRules}`;
 
   function addCost(amount) {
     sessionCost += amount;
+    monthlyCost += amount;
+    localStorage.setItem('monthly_cost', monthlyCost.toFixed(6));
     updateCostDisplay();
-    const monthly = parseFloat(localStorage.getItem('parla_monthly') || '0') + amount;
-    localStorage.setItem('parla_monthly', monthly.toFixed(6));
   }
 
   function updateCostDisplay() {
-    document.getElementById('sess-cost').textContent = '$' + sessionCost.toFixed(3);
+    const sessFmt    = '$' + sessionCost.toFixed(4);
+    const monthlyFmt = '$' + monthlyCost.toFixed(4);
+    const sessCostEl = document.getElementById('sess-cost');
+    if (sessCostEl) sessCostEl.textContent = 'session ' + sessFmt;
+    const sSession = document.getElementById('s-session-cost');
+    if (sSession) sSession.textContent = sessFmt;
+    const sMonthly = document.getElementById('s-monthly-cost');
+    if (sMonthly) sMonthly.textContent = monthlyFmt;
   }
 
   /* ================================ */
@@ -1186,6 +1198,15 @@ ${sharedRules}`;
   (function init() {
     // Skip DOM-dependent setup when loaded in test context
     if (typeof window !== 'undefined' && window.__PARLA_TEST__) return;
+
+    // Monthly cost auto-reset
+    const currentMonth = new Date().getMonth();
+    const storedMonth  = parseInt(localStorage.getItem('monthly_cost_month') ?? '-1', 10);
+    if (storedMonth !== currentMonth) {
+      monthlyCost = 0;
+      localStorage.setItem('monthly_cost', '0');
+      localStorage.setItem('monthly_cost_month', String(currentMonth));
+    }
 
     // Apply saved theme immediately to avoid flash
     const savedTheme = localStorage.getItem('parla_theme') || 'A';

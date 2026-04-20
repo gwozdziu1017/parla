@@ -782,9 +782,6 @@
 
     .session-topbar {
       flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
       padding: 14px 20px;
       padding-top: calc(14px + var(--safe-top));
       border-bottom: 1px solid var(--border);
@@ -803,22 +800,12 @@
       margin-top: 2px;
     }
 
-    .session-cost-block { text-align: right; }
-
-    .session-cost-eyebrow {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
+    .session-cost-label {
+      text-align: right;
+      font-size: 11px;
       color: var(--text-muted);
-    }
-
-    .session-cost-val {
-      font-size: 17px;
-      font-weight: 600;
-      color: var(--accent);
       font-variant-numeric: tabular-nums;
-      margin-top: 2px;
+      margin-top: 8px;
     }
 
     /* Central button stage */
