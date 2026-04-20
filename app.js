@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.5.2';
+  const APP_VERSION = '1.5.3';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -81,6 +81,22 @@
   let currentAudioSource      = null;  // currently playing BufferSourceNode
   let currentSessionId        = 0;     // incremented each session; async callbacks check this to discard stale audio
   let wakeLock             = null;
+  let audioUnlocked        = false;
+
+  // Unlock AudioContext on the very first user interaction anywhere on the page.
+  // This ensures the context is already running before the user reaches Start Session.
+  async function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    try {
+      const ctx = getAudioContext();
+      await ctx.resume();
+      console.log('[Parla] AudioContext unlocked on first touch, state:', ctx.state);
+    } catch(e) {}
+  }
+
+  document.addEventListener('touchstart', unlockAudio, { once: true });
+  document.addEventListener('click',      unlockAudio, { once: true });
 
   async function requestWakeLock() {
     try {
