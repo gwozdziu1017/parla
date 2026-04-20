@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parla — Test Suite</title>
+  <style>
+    :root {
+      --bg:           #0f0e0c;
+      --bg-card:      #181714;
+      --bg-elevated:  #211f1c;
+      --accent:       #c8a96e;
+      --text-primary: #f0ede8;
+      --text-secondary:#8a8680;
+      --text-muted:   #46413b;
+      --border:       rgba(255,255,255,0.06);
+      --border-strong:rgba(255,255,255,0.10);
+      --pass:         #5aad6a;
+      --fail:         #c45c5c;
+      --fail-dim:     rgba(196,92,92,0.10);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      padding: 32px 20px 60px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 32px;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--accent);
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-weight: 600;
+      margin-bottom: 32px;
+    }
+
+    .section-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin: 28px 0 10px;
+    }
+
+    .test-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .test-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: 11px 14px;
+    }
+
+    .test-item.pass { border-color: rgba(90,173,106,0.25); }
+    .test-item.fail { border-color: var(--fail); background: var(--fail-dim); }
+
+    .test-name {
+      font-size: 14px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .test-icon { font-size: 15px; flex-shrink: 0; }
+
+    .test-error {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--fail);
+      font-family: 'Courier New', monospace;
+      padding: 6px 10px;
+      background: rgba(196,92,92,0.07);
+      border-radius: 6px;
+      word-break: break-word;
+    }
+
+    .summary {
+      margin-top: 32px;
+      padding: 16px 18px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+
+    .summary .pass-count { color: var(--pass); font-weight: 600; }
+    .summary .fail-count { color: var(--fail); font-weight: 600; }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<h1>Parla</h1>
+<p class="subtitle">Test Suite</p>
+<div id="output"></div>
+<div class="summary" id="summary"></div>
+
+<script>
+  // Signal app.js to skip DOM-dependent init
+  window.__PARLA_TEST__ = true;
+</script>
+<script src="app.js"></script>
+<script>
+  /* ================================ */
+  /* TEST HARNESS                     */
+  /* ================================ */
+  let passed = 0;
+  let failed = 0;
+  let currentSection = null;
+  let currentList = null;
+  const output = document.getElementById('output');
+
+  function section(label) {
+    const el = document.createElement('p');
+    el.className = 'section-label';
+    el.textContent = label;
+    output.appendChild(el);
+    currentList = document.createElement('div');
+    currentList.className = 'test-list';
+    output.appendChild(currentList);
+  }
+
+  function log(icon, name, errorMsg) {
+    const item = document.createElement('div');
+    item.className = 'test-item ' + (icon === '✅' ? 'pass' : 'fail');
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'test-name';
+    nameEl.innerHTML = `<span class="test-icon">${icon}</span>${name}`;
+    item.appendChild(nameEl);
+
+    if (errorMsg) {
+      const err = document.createElement('div');
+      err.className = 'test-error';
+      err.textContent = errorMsg;
+      item.appendChild(err);
+    }
+
+    (currentList || output).appendChild(item);
+  }
+
+  function test(name, fn) {
+    try {
+      fn();
+      passed++;
+      log('✅', name);
+    } catch(e) {
+      failed++;
+      log('❌', name, e.message);
+    }
+  }
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message || 'Assertion failed');
+  }
+
+  function assertEqual(a, b) {
+    if (a !== b) throw new Error(`Expected "${b}" but got "${a}"`);
+  }
+
+  function skip(name, reason) {
+    // TODO: not yet implemented
+    log('⏭', name + (reason ? ' — ' + reason : ''));
+  }
+
+  /* ================================ */
+  /* SYSTEM PROMPT BUILDER TESTS      */
+  /* ================================ */
+  section('System prompt builder');
+
+  test('Grace maps to shimmer voice', () => {
+    if (typeof getVoiceForTutor !== 'function') throw new Error('getVoiceForTutor not defined');
+    assertEqual(getVoiceForTutor('Grace Fullspeak'), 'shimmer');
+  });
+
+  test('Ben maps to onyx voice', () => {
+    if (typeof getVoiceForTutor !== 'function') throw new Error('getVoiceForTutor not defined');
+    assertEqual(getVoiceForTutor('Ben Dover'), 'onyx');
+  });
+
+  test('System prompt contains tutor name', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const prompt = buildSystemPrompt('Grace Fullspeak', 'mate', 'intermediate', '');
+    assert(prompt.includes('Grace Fullspeak'), 'Tutor name missing from prompt');
+  });
+
+  test('Mate personality prompt is casual', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const prompt = buildSystemPrompt('Grace Fullspeak', 'mate', 'intermediate', '');
+    assert(
+      prompt.toLowerCase().includes('friend') || prompt.toLowerCase().includes('casual'),
+      'Mate prompt should mention casual/friend'
+    );
+  });
+
+  test('Teacher personality prompt mentions correction', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const prompt = buildSystemPrompt('Grace Fullspeak', 'teacher', 'intermediate', '');
+    assert(prompt.toLowerCase().includes('correct'), 'Teacher prompt should mention correction');
+  });
+
+  test('Custom personality uses custom description', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const prompt = buildSystemPrompt('Ben Dover', 'custom', 'intermediate', 'you are a pirate');
+    assert(prompt.includes('you are a pirate'), 'Custom description missing from prompt');
+  });
+
+  test('Guided mode generates different system prompt', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const guided = buildSystemPrompt('Grace Fullspeak', 'guided', 'beginner', '');
+    const mate   = buildSystemPrompt('Grace Fullspeak', 'mate',   'beginner', '');
+    assert(guided !== mate, 'Guided prompt should differ from mate prompt');
+    assert(guided.toLowerCase().includes('polish'), 'Guided prompt should mention Polish');
+  });
+
+  test('Beginner level included in prompt', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const prompt = buildSystemPrompt('Grace Fullspeak', 'mate', 'beginner', '');
+    assert(
+      prompt.toLowerCase().includes('beginner') || prompt.includes('A1'),
+      'Beginner level missing'
+    );
+  });
+
+  test('Native level included in prompt', () => {
+    if (typeof buildSystemPrompt !== 'function') throw new Error('buildSystemPrompt not defined');
+    const prompt = buildSystemPrompt('Grace Fullspeak', 'mate', 'native', '');
+    assert(
+      prompt.toLowerCase().includes('native') || prompt.includes('C1'),
+      'Native level missing'
+    );
+  });
+
+  /* ================================ */
+  /* EOT DETECTION TESTS              */
+  /* ================================ */
+  section('EOT detection');
+
+  test('EOT stripped from end of transcript', () => {
+    if (typeof stripEOT !== 'function') throw new Error('stripEOT not defined');
+    assertEqual(stripEOT('I went to the shop EOT'), 'I went to the shop');
+  });
+
+  test('EOT stripped case insensitive', () => {
+    if (typeof stripEOT !== 'function') throw new Error('stripEOT not defined');
+    assertEqual(stripEOT('hello there eot'), 'hello there');
+  });
+
+  test('EOT alone returns empty string', () => {
+    if (typeof stripEOT !== 'function') throw new Error('stripEOT not defined');
+    assertEqual(stripEOT('EOT'), '');
+  });
+
+  test('No EOT returns transcript unchanged', () => {
+    if (typeof stripEOT !== 'function') throw new Error('stripEOT not defined');
+    assertEqual(stripEOT('I went to the shop'), 'I went to the shop');
+  });
+
+  test('EOT mid-sentence not stripped', () => {
+    if (typeof stripEOT !== 'function') throw new Error('stripEOT not defined');
+    const result = stripEOT('when the game was over I felt empty');
+    assertEqual(result, 'when the game was over I felt empty');
+  });
+
+  /* ================================ */
+  /* SILENCE THRESHOLD TESTS          */
+  /* ================================ */
+  section('Silence thresholds');
+
+  test('Normal mode silence threshold is 3000ms', () => {
+    if (typeof getSilenceThreshold !== 'function') throw new Error('getSilenceThreshold not defined');
+    assertEqual(getSilenceThreshold('mate'), 3000);
+  });
+
+  test('Guided mode silence threshold is 5000ms', () => {
+    if (typeof getSilenceThreshold !== 'function') throw new Error('getSilenceThreshold not defined');
+    assertEqual(getSilenceThreshold('guided'), 5000);
+  });
+
+  test('Teacher mode silence threshold is 3000ms', () => {
+    if (typeof getSilenceThreshold !== 'function') throw new Error('getSilenceThreshold not defined');
+    assertEqual(getSilenceThreshold('teacher'), 3000);
+  });
+
+  /* ================================ */
+  /* STATE TRANSITION TESTS           */
+  /* ================================ */
+  section('State transitions');
+
+  test('Session state starts as idle', () => {
+    if (typeof getSessionState !== 'function') throw new Error('getSessionState not defined');
+    assertEqual(getSessionState(), 'idle');
+  });
+
+  test('setSessionState updates state correctly', () => {
+    if (typeof setSessionState !== 'function') throw new Error('setSessionState not defined');
+    if (typeof getSessionState !== 'function') throw new Error('getSessionState not defined');
+    setSessionState('listening');
+    assertEqual(getSessionState(), 'listening');
+    setSessionState('idle');
+    assertEqual(getSessionState(), 'idle');
+  });
+
+  /* ================================ */
+  /* THEME TESTS                      */
+  /* ================================ */
+  section('Theme');
+
+  test('Default theme is a valid option', () => {
+    const theme = (localStorage.getItem('parla_theme') || 'A').toUpperCase();
+    assert(['A','B','C','D','E'].includes(theme), `"${theme}" is not a valid theme`);
+  });
+
+  /* ================================ */
+  /* SUMMARY                          */
+  /* ================================ */
+  const total = passed + failed;
+  const summary = document.getElementById('summary');
+  summary.innerHTML =
+    `<span class="pass-count">${passed} passed</span>, ` +
+    `<span class="fail-count">${failed} failed</span> ` +
+    `out of ${total} tests`;
+</script>
+</body>
+</html>
