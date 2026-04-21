@@ -419,7 +419,10 @@
       await new Promise(resolve => {
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
-        source.connect(ctx.destination);
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 1.5;
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
         currentAudioSource = source;
         source.onended = () => {
           if (currentAudioSource === source) currentAudioSource = null;
@@ -490,7 +493,10 @@
       await new Promise((resolve) => {
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
-        source.connect(ctx.destination);
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 1.5;
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
         currentAudioSource = source;
         source.onended = () => {
           if (currentAudioSource === source) currentAudioSource = null;
