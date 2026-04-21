@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.7.2';
+  const APP_VERSION = '1.7.3';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -207,15 +207,9 @@
   /* ================================ */
   /* SETTINGS CONTROLS                */
   /* ================================ */
-  function selectCorr(btn) {
-    document.querySelectorAll('#corr-tabs .seg-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    persist();
-  }
-
   function formatCost(usd) {
     const pln = usd * usdPlnRate;
-    return `$${usd.toFixed(4)} / ${pln.toFixed(4)} zł`;
+    return `$${usd.toFixed(2)} / ${pln.toFixed(2)} zł`;
   }
 
   function refreshSettingsUI() {
@@ -233,11 +227,7 @@
   /* PERSISTENCE (localStorage)       */
   /* ================================ */
   function persist() {
-    const activeCorr = document.querySelector('#corr-tabs .seg-btn.active');
-
     const data = {
-      nativeLang:   document.getElementById('native-lang')?.value || '',
-      corrStyle:    activeCorr?.dataset.corr || 'brief',
       anthropicKey: document.getElementById('anthropic-key')?.value || '',
       openaiKey:    document.getElementById('openai-key')?.value    || '',
     };
@@ -254,12 +244,6 @@
     let d = {};
     if (raw) { try { d = JSON.parse(raw); } catch {} }
 
-    // Settings screen fields
-    if (d.nativeLang) document.getElementById('native-lang').value = d.nativeLang;
-    if (d.corrStyle) {
-      document.querySelectorAll('#corr-tabs .seg-btn').forEach(b =>
-        b.classList.toggle('active', b.dataset.corr === d.corrStyle));
-    }
     const storedAnthropic = localStorage.getItem('anthropic_api_key') || d.anthropicKey || '';
     if (storedAnthropic) document.getElementById('anthropic-key').value = storedAnthropic;
     const storedOpenAI    = localStorage.getItem('openai_api_key')    || d.openaiKey    || '';
@@ -768,6 +752,12 @@
       : TUTORS[activeTutor];
     const isGuided = personality === 'guided';
 
+    // ── HARDCODED STUDENT CONTEXT ────────────────────────────────────────────
+    const studentBlock = `You are talking to a Polish native speaker living in Poland learning English.`;
+
+    // ── HARDCODED CORRECTION STYLE ────────────────────────────────────────────
+    const correctionBlock = `CORRECTION STYLE: Brief — when correcting, just say the fix naturally in one short sentence. Example: "by the way, it's 'went' not 'have went'." Then continue immediately.`;
+
     // ── BRITISH ENGLISH BLOCK ─────────────────────────────────────────────────
     const britishBlock = `LANGUAGE STYLE:
 - Use British English vocabulary and spelling throughout
@@ -783,6 +773,8 @@
     if (isGuided) {
       return `You are ${tutor.name}, an English tutor in a voice app called Parla. You are teaching a complete beginner Polish native speaker.
 
+${studentBlock}
+
 ${sessionStartBlock}
 
 GUIDED MODE RULES:
@@ -795,6 +787,8 @@ GUIDED MODE RULES:
 - Keep everything simple, warm and encouraging
 - Short sentences only, basic vocabulary
 - Never overwhelm with multiple corrections at once
+
+${correctionBlock}
 
 ${britishBlock}
 
@@ -843,11 +837,15 @@ Respond only in plain spoken English. No formatting, no lists, no markdown.`;
 
     return `${tutorBlock}
 
+${studentBlock}
+
 ${sessionStartBlock}
 
 ${personalityBlock}
 
 ${levelBlock}
+
+${correctionBlock}
 
 ${britishBlock}
 
