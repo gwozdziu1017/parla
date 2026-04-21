@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.7.1';
+  const APP_VERSION = '1.7.2';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -322,7 +322,12 @@
       setAppState(STATE.PROCESSING);
       requestWakeLock();
 
-      // Ask Claude to generate the opening line dynamically
+      // Prime the full TTS pipeline with a short phrase — this warms up iOS audio
+      // end-to-end (fetch → decode → play) so the real message plays without issues.
+      await primeTTS('.');
+      if (!sessionActive) return;
+
+      // Now safe to generate and speak the real first message
       console.log('[Parla] Sending [SESSION_START] to Claude');
       try {
         const raw = await askClaude('[SESSION_START]');
@@ -398,6 +403,50 @@
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     return audioContext;
+  }
+
+  // Plays a short phrase through the full TTS pipeline to warm up iOS audio.
+  // Does NOT suspend the context after playback, so the real message plays immediately
+  // into a live AudioContext without needing another resume().
+  async function primeTTS(text) {
+    const mySessionId = currentSessionId;
+    const openaiKey = localStorage.getItem('openai_api_key')?.trim();
+    if (!openaiKey) return;
+    try {
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'tts-1-hd',
+          voice: TUTORS[activeTutor].voice,
+          input: text,
+        }),
+      });
+      if (!response.ok || mySessionId !== currentSessionId) return;
+      const arrayBuffer = await response.arrayBuffer();
+      if (mySessionId !== currentSessionId) return;
+      const ctx = getAudioContext();
+      await ctx.resume();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      if (mySessionId !== currentSessionId) return;
+      await new Promise(resolve => {
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        currentAudioSource = source;
+        source.onended = () => {
+          if (currentAudioSource === source) currentAudioSource = null;
+          resolve(); // do NOT suspend — keep context live for real TTS
+        };
+        source.start(0);
+      });
+      console.log('[Parla] primeTTS complete — audio pipeline warmed up');
+    } catch(e) {
+      console.log('[Parla] primeTTS failed (non-fatal):', e.message);
+    }
   }
 
   async function speak(text) {
