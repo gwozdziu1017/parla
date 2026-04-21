@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.7.0';
+  const APP_VERSION = '1.7.1';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -86,6 +86,7 @@
   let sessionCost          = 0;
   let monthlyCost          = parseFloat(localStorage.getItem('monthly_cost') || '0');
   let recognition          = null;
+  let silenceTimer         = null;
   let interimEl            = null;
   let accumTranscript      = '';
   let conversationHistory  = [];       // [{role, content}] sent to Claude
@@ -110,6 +111,21 @@
 
   document.addEventListener('touchstart', unlockAudio, { once: true });
   document.addEventListener('click',      unlockAudio, { once: true });
+
+  // Play a silent buffer to force iOS to fully unlock the AudioContext.
+  // ctx.resume() alone is sometimes insufficient — a real buffer playback is required.
+  async function forceUnlockAudio() {
+    try {
+      const ctx = getAudioContext();
+      await ctx.resume();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch(e) {}
+  }
 
   async function requestWakeLock() {
     try {
@@ -297,11 +313,9 @@
     if (sessionState === 'loading' || sessionState === 'speaking' || sessionState === 'listening') return;
 
     if (!sessionStarted) {
-      // Unlock AudioContext on iOS — MUST be awaited inside the gesture handler.
-      const ctx = getAudioContext();
-      console.log('[Parla] AudioContext state before gesture resume:', ctx.state);
-      try { await ctx.resume(); } catch(e) { console.warn('[Parla] ctx.resume() failed in gesture:', e); }
-      console.log('[Parla] AudioContext state after gesture resume:', ctx.state);
+      // Force-unlock AudioContext on iOS — must happen synchronously inside gesture handler.
+      // Playing a silent buffer is more reliable than resume() alone on iOS Safari.
+      await forceUnlockAudio();
 
       sessionStarted = true;
       sessionActive  = true;
@@ -514,6 +528,8 @@
     recognition.interimResults  = true;
     recognition.maxAlternatives = 1;
 
+    const SILENCE_MS = 10000; // 10s fallback — fires if user stops speaking without saying EOT
+
     recognition.onresult = (e) => {
       // Accumulate all results (finals + current interim) from the full session
       let accumulated = '';
@@ -533,13 +549,25 @@
       }
       log.scrollTop = log.scrollHeight;
 
-      // EOT keyword detected — stop recognition, send to Claude
+      // EOT keyword detected — stop immediately (primary turn-end mechanism)
       if (/\beot\b/i.test(accumTranscript)) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
         try { recognition.stop(); } catch {}
+        return;
       }
+
+      // Reset 10s silence fallback on every new result
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        try { recognition.stop(); } catch {}
+      }, SILENCE_MS);
     };
 
     recognition.onend = () => {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
       recognition = null;
 
       if (!sessionActive || appState === STATE.GUIDE_PENDING || appState === STATE.PROCESSING || appState === STATE.SPEAKING) {
@@ -559,6 +587,8 @@
     };
 
     recognition.onerror = (e) => {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
       if (interimEl) { interimEl.remove(); interimEl = null; }
       // onend will still fire after onerror — set recognition=null to prevent double-processing
       recognition = null;
@@ -590,6 +620,8 @@
   }
 
   function stopListening() {
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
     if (recognition) {
       try { recognition.abort(); } catch {}
       recognition = null;
@@ -601,8 +633,10 @@
     if (!sessionActive || appState !== STATE.LISTENING) return;
     setAppState(STATE.GUIDE_PENDING);
 
-    // Immediately kill mic and clear accumulated transcript so
+    // Immediately kill mic, silence timer, and accumulated transcript so
     // onend fires cleanly without triggering a second speech result
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
     accumTranscript = '';
     if (recognition) {
       try { recognition.stop(); } catch(e) {}
