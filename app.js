@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.7.3';
+  const APP_VERSION = '1.7.4';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -112,16 +112,17 @@
   document.addEventListener('touchstart', unlockAudio, { once: true });
   document.addEventListener('click',      unlockAudio, { once: true });
 
-  // Play a silent buffer to force iOS to fully unlock the AudioContext.
-  // ctx.resume() alone is sometimes insufficient — a real buffer playback is required.
-  async function forceUnlockAudio() {
+  // Resumes AudioContext and plays a 1-frame silent buffer to force iOS unlock.
+  // Connects directly to destination — no GainNode — so it cannot affect the
+  // volume state of any subsequent real TTS playback.
+  async function unlockAudioContext() {
     try {
       const ctx = getAudioContext();
       await ctx.resume();
       const buffer = ctx.createBuffer(1, 1, 22050);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      source.connect(ctx.destination); // direct — no gain node
       source.start(0);
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch(e) {}
@@ -299,17 +300,12 @@
     if (!sessionStarted) {
       // Force-unlock AudioContext on iOS — must happen synchronously inside gesture handler.
       // Playing a silent buffer is more reliable than resume() alone on iOS Safari.
-      await forceUnlockAudio();
+      await unlockAudioContext();
 
       sessionStarted = true;
       sessionActive  = true;
       setAppState(STATE.PROCESSING);
       requestWakeLock();
-
-      // Prime the full TTS pipeline with a short phrase — this warms up iOS audio
-      // end-to-end (fetch → decode → play) so the real message plays without issues.
-      await primeTTS('.');
-      if (!sessionActive) return;
 
       // Now safe to generate and speak the real first message
       console.log('[Parla] Sending [SESSION_START] to Claude');
@@ -387,53 +383,6 @@
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     return audioContext;
-  }
-
-  // Plays a short phrase through the full TTS pipeline to warm up iOS audio.
-  // Does NOT suspend the context after playback, so the real message plays immediately
-  // into a live AudioContext without needing another resume().
-  async function primeTTS(text) {
-    const mySessionId = currentSessionId;
-    const openaiKey = localStorage.getItem('openai_api_key')?.trim();
-    if (!openaiKey) return;
-    try {
-      const response = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'tts-1-hd',
-          voice: TUTORS[activeTutor].voice,
-          input: text,
-        }),
-      });
-      if (!response.ok || mySessionId !== currentSessionId) return;
-      const arrayBuffer = await response.arrayBuffer();
-      if (mySessionId !== currentSessionId) return;
-      const ctx = getAudioContext();
-      await ctx.resume();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      if (mySessionId !== currentSessionId) return;
-      await new Promise(resolve => {
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        const gainNode = ctx.createGain();
-        gainNode.gain.value = 1.5;
-        source.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        currentAudioSource = source;
-        source.onended = () => {
-          if (currentAudioSource === source) currentAudioSource = null;
-          resolve(); // do NOT suspend — keep context live for real TTS
-        };
-        source.start(0);
-      });
-      console.log('[Parla] primeTTS complete — audio pipeline warmed up');
-    } catch(e) {
-      console.log('[Parla] primeTTS failed (non-fatal):', e.message);
-    }
   }
 
   async function speak(text) {
