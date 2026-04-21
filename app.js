@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.5.3';
+  const APP_VERSION = '1.6.0';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -72,7 +72,6 @@
   let sessionCost          = 0;
   let monthlyCost          = parseFloat(localStorage.getItem('monthly_cost') || '0');
   let recognition          = null;
-  let silenceTimer         = null;
   let interimEl            = null;
   let accumTranscript      = '';
   let conversationHistory  = [];       // [{role, content}] sent to Claude
@@ -254,13 +253,6 @@
   /* ================================ */
   /* SESSION                          */
   /* ================================ */
-  function getTutorGreeting() {
-    if (selectedPersonality === 'guided') {
-      return "Cześć! Let's practice English together. Jestem tutaj, żeby ci pomóc. I'm here to help. If you need a hint, tap 'Guide me'. Ready? How are you today?";
-    }
-    return TUTORS[activeTutor].greeting;
-  }
-
   function startSession() {
     const t = TUTORS[activeTutor];
     document.getElementById('sess-name').textContent = t.name;
@@ -306,8 +298,6 @@
 
     if (!sessionStarted) {
       // Unlock AudioContext on iOS — MUST be awaited inside the gesture handler.
-      // If resume() is fire-and-forget, the context may still be suspended when
-      // source.start(0) fires inside speak(), producing no audio and hanging forever.
       const ctx = getAudioContext();
       console.log('[Parla] AudioContext state before gesture resume:', ctx.state);
       try { await ctx.resume(); } catch(e) { console.warn('[Parla] ctx.resume() failed in gesture:', e); }
@@ -315,13 +305,19 @@
 
       sessionStarted = true;
       sessionActive  = true;
-      setAppState(STATE.PROCESSING); // show loading UI during TTS fetch
+      setAppState(STATE.PROCESSING);
       requestWakeLock();
-      // 600ms pause before greeting so it doesn't fire instantly
-      setTimeout(() => {
-        console.log('[Parla] setTimeout fired — calling speak() with greeting, appState:', appState);
-        speak(getTutorGreeting());
-      }, 600);
+
+      // Ask Claude to generate the opening line dynamically
+      console.log('[Parla] Sending [SESSION_START] to Claude');
+      try {
+        const raw = await askClaude('[SESSION_START]');
+        if (!raw || !sessionActive) return;
+        const cleaned = handleVocabSave(raw);
+        speak(cleaned);
+      } catch(err) {
+        speak('Sorry, I had a problem starting the session. The error was: ' + err.message);
+      }
     }
   }
 
@@ -484,12 +480,6 @@
   /* ================================ */
   /* SPEECH RECOGNITION (STT)         */
   /* ================================ */
-  function getPauseSensitivityMs() {
-    const settings = JSON.parse(localStorage.getItem('parla_settings') || '{}');
-    const raw = parseFloat(settings.pauseVal || '20');
-    return (raw / 10) * 1000; // e.g. 20 → 2000ms, 30 → 3000ms
-  }
-
   function startListening() {
     if (!sessionActive) return;
     if (appState !== STATE.IDLE) {
@@ -520,56 +510,36 @@
 
     recognition = new SR();
     recognition.lang            = 'en-US';
-    recognition.continuous      = false;
+    recognition.continuous      = true;   // never stops on its own — EOT ends the turn
     recognition.interimResults  = true;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (e) => {
-      let interim = '';
-      let final   = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) { final += t; }
-        else                      { interim += t; }
+      // Accumulate all results (finals + current interim) from the full session
+      let accumulated = '';
+      for (let i = 0; i < e.results.length; i++) {
+        accumulated += e.results[i][0].transcript;
       }
+      accumTranscript = accumulated;
 
-      accumTranscript = final || interim;
+      // Determine if the latest chunk is a final result (for bubble styling)
+      const latestIsFinal = e.results[e.results.length - 1].isFinal;
 
       // Update interim bubble
       const bubble = interimEl?.querySelector('.conv-bubble');
       if (bubble) {
         bubble.textContent = accumTranscript;
-        bubble.classList.toggle('conv-bubble-interim', !final);
+        bubble.classList.toggle('conv-bubble-interim', !latestIsFinal);
       }
       log.scrollTop = log.scrollHeight;
 
-      // EOT keyword — end turn immediately regardless of final/interim
+      // EOT keyword detected — stop recognition, send to Claude
       if (/\beot\b/i.test(accumTranscript)) {
-        clearTimeout(silenceTimer);
-        silenceTimer = null;
         try { recognition.stop(); } catch {}
-        return;
       }
-
-      // On final result, stop — no need to wait for silence timer
-      if (final) {
-        clearTimeout(silenceTimer);
-        silenceTimer = null;
-        try { recognition.stop(); } catch {}
-        return;
-      }
-
-      // Interim: reset silence timer with extra buffer so words don't get cut off
-      // Guided mode gets extra patience (5s) to let beginners think
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => {
-        try { recognition.stop(); } catch {}
-      }, getSilenceThreshold(selectedPersonality));
     };
 
     recognition.onend = () => {
-      clearTimeout(silenceTimer);
-      silenceTimer = null;
       recognition = null;
 
       if (!sessionActive || appState === STATE.GUIDE_PENDING || appState === STATE.PROCESSING || appState === STATE.SPEAKING) {
@@ -582,18 +552,15 @@
       if (transcript.trim().length > 0) {
         onSpeechResult(transcript);
       } else {
-        // Nothing heard (or only EOT) — remove empty interim bubble and listen again
+        // Only EOT or nothing heard — remove empty bubble and listen again
         if (interimEl) { interimEl.remove(); interimEl = null; }
         setTimeout(() => startListening(), 400);
       }
     };
 
     recognition.onerror = (e) => {
-      clearTimeout(silenceTimer);
-      silenceTimer = null;
       if (interimEl) { interimEl.remove(); interimEl = null; }
-      // onend will still fire after onerror, so we set recognition=null here
-      // to prevent double-processing in onend
+      // onend will still fire after onerror — set recognition=null to prevent double-processing
       recognition = null;
 
       if (!sessionActive) return;
@@ -623,8 +590,6 @@
   }
 
   function stopListening() {
-    clearTimeout(silenceTimer);
-    silenceTimer = null;
     if (recognition) {
       try { recognition.abort(); } catch {}
       recognition = null;
@@ -636,10 +601,8 @@
     if (!sessionActive || appState !== STATE.LISTENING) return;
     setAppState(STATE.GUIDE_PENDING);
 
-    // Immediately kill mic, silence timer, and accumulated transcript so
+    // Immediately kill mic and clear accumulated transcript so
     // onend fires cleanly without triggering a second speech result
-    clearTimeout(silenceTimer);
-    silenceTimer = null;
     accumTranscript = '';
     if (recognition) {
       try { recognition.stop(); } catch(e) {}
@@ -668,47 +631,6 @@
     }
     if (audioContext && audioContext.state !== 'closed') {
       try { audioContext.suspend(); } catch {}
-    }
-  }
-
-  async function isCompleteSentence(transcript) {
-    // Safety: anything over 3 words is always treated as complete — avoids
-    // over-aggressive incomplete classification from the model
-    const wordCount = transcript.trim().split(/\s+/).length;
-    if (wordCount > 3) {
-      console.log('[GUIDED] Word count > 3, skipping completeness check — treating as complete');
-      return true;
-    }
-
-    const apiKey = localStorage.getItem('anthropic_api_key') || '';
-    if (!apiKey) return true; // fail open
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key':                              apiKey,
-          'anthropic-version':                      '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type':                           'application/json',
-        },
-        body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
-          max_tokens: 5,
-          system:     'Does this English sentence feel complete or unfinished? Reply with one word only: complete or incomplete.',
-          messages:   [{ role: 'user', content: transcript }],
-        }),
-      });
-      if (!response.ok) {
-        console.log('[GUIDED] Completeness check API error', response.status, '— defaulting to complete');
-        return true; // fail open
-      }
-      const data = await response.json();
-      const word = (data.content?.[0]?.text || '').trim().toLowerCase();
-      console.log('[GUIDED] Completeness API raw response:', JSON.stringify(word));
-      return word !== 'incomplete';
-    } catch (e) {
-      console.log('[GUIDED] Completeness check threw:', e.message, '— defaulting to complete');
-      return true; // fail open
     }
   }
 
@@ -749,11 +671,6 @@
     return transcript.replace(/[,.]?\s*\beot\b\s*[,.]?/gi, ' ').trim();
   }
 
-  // Return silence threshold ms for a given personality (testable)
-  function getSilenceThreshold(personality) {
-    return personality === 'guided' ? 5000 : getPauseSensitivityMs() + 1000;
-  }
-
   // Simple getters/setters for session state (needed for testing)
   function getSessionState() { return sessionState; }
   function setSessionState(state) { sessionState = state; }
@@ -776,9 +693,14 @@
 - British spelling: -our endings (colour, favour), -ise endings (realise, organise), -re endings (centre, theatre)
 - Keep it natural — don't force every British expression into every sentence, just let it flow`;
 
+    // ── SESSION START INSTRUCTION ─────────────────────────────────────────────
+    const sessionStartBlock = `When you receive [SESSION_START], introduce yourself briefly in character and start the conversation naturally. One or two sentences maximum. Do not mention [SESSION_START] in your response.`;
+
     // ── GUIDED MODE ───────────────────────────────────────────────────────────
     if (isGuided) {
       return `You are ${tutor.name}, an English tutor in a voice app called Parla. You are teaching a complete beginner Polish native speaker.
+
+${sessionStartBlock}
 
 GUIDED MODE RULES:
 - Always start your turn by asking a question or making a statement in Polish first, then immediately translate it to English
@@ -837,6 +759,8 @@ VOCABULARY:
 Respond only in plain spoken English. No formatting, no lists, no markdown.`;
 
     return `${tutorBlock}
+
+${sessionStartBlock}
 
 ${personalityBlock}
 
@@ -912,6 +836,7 @@ ${sharedRules}`;
     const empty = document.getElementById('conv-empty');
     if (empty) empty.remove();
 
+    if (from === 'user' && text === '[SESSION_START]') return; // never shown in transcript
     const display = (from === 'user' && text === '[GUIDE_REQUEST]') ? '💡 Guide me' : text;
     const safe = display.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const el = document.createElement('div');

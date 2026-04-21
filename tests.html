@@ -290,26 +290,6 @@
   });
 
   /* ================================ */
-  /* SILENCE THRESHOLD TESTS          */
-  /* ================================ */
-  section('Silence thresholds');
-
-  test('Normal mode silence threshold is 3000ms', () => {
-    if (typeof getSilenceThreshold !== 'function') throw new Error('getSilenceThreshold not defined');
-    assertEqual(getSilenceThreshold('mate'), 3000);
-  });
-
-  test('Guided mode silence threshold is 5000ms', () => {
-    if (typeof getSilenceThreshold !== 'function') throw new Error('getSilenceThreshold not defined');
-    assertEqual(getSilenceThreshold('guided'), 5000);
-  });
-
-  test('Teacher mode silence threshold is 3000ms', () => {
-    if (typeof getSilenceThreshold !== 'function') throw new Error('getSilenceThreshold not defined');
-    assertEqual(getSilenceThreshold('teacher'), 3000);
-  });
-
-  /* ================================ */
   /* STATE TRANSITION TESTS           */
   /* ================================ */
   section('State transitions');
