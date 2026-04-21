@@ -1,10 +1,24 @@
-  const APP_VERSION = '1.6.0';
+  const APP_VERSION = '1.7.0';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
     claudeOutput: 15.00 / 1_000_000,
     ttsHD:        30.00 / 1_000_000,
   };
+
+  let usdPlnRate = 4.00; // fallback; overwritten on page load
+
+  async function fetchExchangeRate() {
+    try {
+      const res = await fetch('https://open.er-api.com/v6/latest/USD');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.rates?.PLN) usdPlnRate = data.rates.PLN;
+      console.log('[Parla] USD/PLN rate:', usdPlnRate);
+    } catch(e) {
+      console.log('[Parla] Exchange rate fetch failed, using fallback 4.00');
+    }
+  }
 
   /* ================================ */
   /* STATE MACHINE                    */
@@ -177,33 +191,26 @@
   /* ================================ */
   /* SETTINGS CONTROLS                */
   /* ================================ */
-  function selectLevel(btn) {
-    document.querySelectorAll('#level-tabs .seg-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    persist();
-  }
-
   function selectCorr(btn) {
     document.querySelectorAll('#corr-tabs .seg-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     persist();
   }
 
-  function onSlider(input) {
-    const secs = (input.value / 10).toFixed(1) + 's';
-    document.getElementById('pause-val').textContent = secs;
-    persist();
+  function formatCost(usd) {
+    const pln = usd * usdPlnRate;
+    return `$${usd.toFixed(4)} / ${pln.toFixed(4)} zł`;
   }
 
   function refreshSettingsUI() {
-    document.getElementById('s-monthly-cost').textContent = '$' + monthlyCost.toFixed(4);
-    document.getElementById('s-session-cost').textContent = '$' + sessionCost.toFixed(4);
+    document.getElementById('s-monthly-cost').textContent = formatCost(monthlyCost);
+    document.getElementById('s-session-cost').textContent = formatCost(sessionCost);
   }
 
   function resetMonthly() {
     monthlyCost = 0;
     localStorage.setItem('monthly_cost', '0');
-    document.getElementById('s-monthly-cost').textContent = '$0.0000';
+    document.getElementById('s-monthly-cost').textContent = formatCost(0);
   }
 
   /* ================================ */
@@ -211,11 +218,9 @@
   /* ================================ */
   function persist() {
     const activeCorr = document.querySelector('#corr-tabs .seg-btn.active');
-    const slider     = document.getElementById('pause-slider');
 
     const data = {
       nativeLang:   document.getElementById('native-lang')?.value || '',
-      pauseVal:     slider?.value || '20',
       corrStyle:    activeCorr?.dataset.corr || 'brief',
       anthropicKey: document.getElementById('anthropic-key')?.value || '',
       openaiKey:    document.getElementById('openai-key')?.value    || '',
@@ -235,11 +240,6 @@
 
     // Settings screen fields
     if (d.nativeLang) document.getElementById('native-lang').value = d.nativeLang;
-    if (d.pauseVal) {
-      const sl = document.getElementById('pause-slider');
-      sl.value = d.pauseVal;
-      onSlider(sl);
-    }
     if (d.corrStyle) {
       document.querySelectorAll('#corr-tabs .seg-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.corr === d.corrStyle));
@@ -854,14 +854,12 @@ ${sharedRules}`;
   }
 
   function updateCostDisplay() {
-    const sessFmt    = '$' + sessionCost.toFixed(4);
-    const monthlyFmt = '$' + monthlyCost.toFixed(4);
     const sessCostEl = document.getElementById('sess-cost');
-    if (sessCostEl) sessCostEl.textContent = 'session ' + sessFmt;
+    if (sessCostEl) sessCostEl.textContent = 'session ' + formatCost(sessionCost);
     const sSession = document.getElementById('s-session-cost');
-    if (sSession) sSession.textContent = sessFmt;
+    if (sSession) sSession.textContent = formatCost(sessionCost);
     const sMonthly = document.getElementById('s-monthly-cost');
-    if (sMonthly) sMonthly.textContent = monthlyFmt;
+    if (sMonthly) sMonthly.textContent = formatCost(monthlyCost);
   }
 
   /* ================================ */
@@ -1146,6 +1144,8 @@ ${sharedRules}`;
   (function init() {
     // Skip DOM-dependent setup when loaded in test context
     if (typeof window !== 'undefined' && window.__PARLA_TEST__) return;
+
+    fetchExchangeRate();
 
     // Monthly cost auto-reset
     const currentMonth = new Date().getMonth();
