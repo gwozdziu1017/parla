@@ -113,6 +113,7 @@
     <!-- 4. Start Session -->
     <div class="home-footer">
       <button class="start-btn" onclick="startSession()">Start Session</button>
+      <div class="home-credits-link"><button class="credits-link-btn" onclick="nav('credits-screen')">credits</button></div>
     </div>
   </div><!-- /home-screen -->
 
@@ -256,6 +257,38 @@
       <!-- rendered by JS -->
     </div>
   </div><!-- /vocab-screen -->
+
+  <!-- ======================== -->
+  <!-- CREDITS SCREEN          -->
+  <!-- ======================== -->
+  <div id="credits-screen" class="screen">
+    <div class="nav-header">
+      <button class="back-btn" onclick="nav('home-screen')" aria-label="Back to Home">
+        <svg viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <span class="nav-title">Credits</span>
+    </div>
+    <div class="credits-body">
+      <p class="credits-title">Parla</p>
+
+      <p class="credits-p">Parla is a voice-first English learning app built to help you practice natural conversation anytime, anywhere.</p>
+
+      <p class="credits-p">Parla was cooked up by Damian Gwóźdź who had the idea, the determination, and absolutely no intention of giving up — even when iOS decided microphones and speakers can't be friends.</p>
+
+      <p class="credits-p">The heavy lifting was done by Claude (Anthropic) — chief architect, code monkey, naming consultant, and the one who suggested "Grace Fullspeak" with a completely straight face.</p>
+
+      <p class="credits-p">Under the hood:</p>
+      <p class="credits-row">🧠 Claude — makes Grace and Ben sound smart</p>
+      <p class="credits-row">🗣️ OpenAI TTS — gives them actual voices</p>
+      <p class="credits-row">🎙️ Web Speech API — listens to you (politely)</p>
+
+      <p class="credits-p">Your tutors: Grace Fullspeak · Ben Dover</p>
+
+      <p class="credits-p">🌐 GitHub Pages · v<span id="credits-version"></span></p>
+
+      <p class="credits-p">Built with patience, lots of determination, and an unreasonable number of iOS audio session bugs.</p>
+    </div>
+  </div><!-- /credits-screen -->
 
   <!-- ======================== -->
   <!-- THEME PICKER OVERLAY    -->

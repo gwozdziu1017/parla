@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.8.1';
+  const APP_VERSION = '1.8.2';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -1272,7 +1272,8 @@ ${sharedRules}`;
     const savedTheme = localStorage.getItem('parla_theme') || 'A';
     applyTheme(savedTheme);
 
-    document.getElementById('app-version').textContent = 'v' + APP_VERSION;
+    document.getElementById('app-version').textContent  = 'v' + APP_VERSION;
+    document.getElementById('credits-version').textContent = APP_VERSION;
 
     restore();
     nav('home-screen');

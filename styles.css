@@ -1094,6 +1094,54 @@
     .post-session-btn:active { opacity: 0.75; }
 
     /* ===================== */
+    /* CREDITS SCREEN        */
+    /* ===================== */
+    .credits-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 24px 40px;
+    }
+
+    .credits-title {
+      font-family: 'Fraunces', serif;
+      font-size: 32px;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+
+    .credits-p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+
+    .credits-row {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 4px;
+      padding-left: 4px;
+    }
+
+    .home-credits-link {
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    .credits-link-btn {
+      background: none;
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    /* ===================== */
     /* VOCABULARY SCREEN     */
     /* ===================== */
     #vocab-screen { overflow: hidden; }
