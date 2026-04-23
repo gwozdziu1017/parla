@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.7.4';
+  const APP_VERSION = '1.8.0';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -373,6 +373,12 @@
       guideBtn.classList.toggle('visible',
         selectedPersonality === 'guided' && sessionState === 'listening' && sessionActive);
     }
+
+    // End turn button: visible only during listening
+    const endTurnBtn = document.getElementById('end-turn-btn');
+    if (endTurnBtn) {
+      endTurnBtn.classList.toggle('visible', sessionState === 'listening' && sessionActive);
+    }
   }
 
   /* ================================ */
@@ -516,7 +522,7 @@
     recognition.interimResults  = true;
     recognition.maxAlternatives = 1;
 
-    const SILENCE_MS = 10000; // 10s fallback — fires if user stops speaking without saying EOT
+    const SILENCE_MS = 7500; // 7.5s fallback — fires if user stops speaking without saying EOT
 
     recognition.onresult = (e) => {
       // Accumulate all results (finals + current interim) from the full session
@@ -538,7 +544,7 @@
       log.scrollTop = log.scrollHeight;
 
       // EOT keyword detected — stop immediately (primary turn-end mechanism)
-      if (/\beot\b/i.test(accumTranscript)) {
+      if (containsEOT(accumTranscript)) {
         clearTimeout(silenceTimer);
         silenceTimer = null;
         try { recognition.stop(); } catch {}
@@ -617,6 +623,16 @@
     if (interimEl) { interimEl.remove(); interimEl = null; }
   }
 
+  function onEndTurnBtn() {
+    if (!sessionActive || appState !== STATE.LISTENING) return;
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+    if (recognition) {
+      try { recognition.stop(); } catch {}
+    }
+    // onend will fire and handle sending transcript or restarting listening
+  }
+
   async function onGuideBtn() {
     if (!sessionActive || appState !== STATE.LISTENING) return;
     setAppState(STATE.GUIDE_PENDING);
@@ -688,9 +704,14 @@
     return tutor ? tutor.voice : null;
   }
 
-  // Extract EOT keyword from a transcript (pure function, testable)
+  // Detect EOT anywhere in the transcript — attached to a word or standalone
+  function containsEOT(transcript) {
+    return /EOT/i.test(transcript);
+  }
+
+  // Strip EOT from transcript regardless of surrounding characters
   function stripEOT(transcript) {
-    return transcript.replace(/[,.]?\s*\beot\b\s*[,.]?/gi, ' ').trim();
+    return transcript.replace(/\s*EOT\s*/gi, '').replace(/EOT/gi, '').trim();
   }
 
   // Simple getters/setters for session state (needed for testing)

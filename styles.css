@@ -490,6 +490,28 @@
     .guide-float-btn.visible { display: block; }
     .guide-float-btn:active { opacity: 0.82; transform: translateX(-50%) scale(0.96); }
 
+    .end-turn-btn {
+      position: absolute;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      padding: 11px 28px;
+      background: transparent;
+      color: var(--accent);
+      border: 1.5px solid var(--accent-border);
+      border-radius: 100px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      display: none;
+    }
+
+    .end-turn-btn.visible { display: block; }
+    .end-turn-btn:active { opacity: 0.75; transform: translateX(-50%) scale(0.96); }
+
     /* ===================== */
     /* THEME PICKER          */
     /* ===================== */
