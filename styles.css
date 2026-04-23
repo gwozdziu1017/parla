@@ -1063,6 +1063,36 @@
       border-color: rgba(196,92,92,0.45);
     }
 
+    .session-footer-ended {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .post-session-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: var(--radius);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .post-session-btn--primary {
+      background: var(--accent);
+      color: var(--btn-text);
+      border: none;
+    }
+
+    .post-session-btn--secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1.5px solid var(--border-strong);
+    }
+
+    .post-session-btn:active { opacity: 0.75; }
+
     /* ===================== */
     /* VOCABULARY SCREEN     */
     /* ===================== */

@@ -226,10 +226,16 @@
     <button class="guide-float-btn" id="guide-float-btn" onclick="onGuideBtn()">Guide me</button>
     <button class="end-turn-btn" id="end-turn-btn" onclick="onEndTurnBtn()">End turn</button>
 
-    <!-- End session -->
-    <div class="session-footer">
+    <!-- End session (active) -->
+    <div class="session-footer" id="session-footer-active">
       <button class="end-btn" onclick="endSession()">End Session</button>
-      <div class="session-cost-label" id="sess-cost">session $0.0000</div>
+      <div class="session-cost-label" id="sess-cost">session $0.00 / 0.00 zł</div>
+    </div>
+
+    <!-- Post-session actions (shown after End Session tapped) -->
+    <div class="session-footer session-footer-ended" id="session-footer-ended" style="display:none">
+      <button class="post-session-btn post-session-btn--secondary" onclick="backToMenu()">Back to menu</button>
+      <button class="post-session-btn post-session-btn--primary" onclick="saveTranscription()">Save transcription</button>
     </div>
 
   </div><!-- /session-screen -->
@@ -266,6 +272,7 @@
 
 </div><!-- /app -->
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
