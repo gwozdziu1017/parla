@@ -968,7 +968,7 @@
       flex: 1;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 14px 20px;
+      padding: 14px 20px 100px;
       display: flex;
       flex-direction: column;
       gap: 11px;
