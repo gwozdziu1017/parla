@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.8.5';
+  const APP_VERSION = '1.9.0';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -1106,99 +1106,6 @@ ${sharedRules}`;
       },
       swatch: { bg: '#0f0e0c', accent: '#c8a96e' },
     },
-    B: {
-      name: 'Deep blue night',
-      vars: {
-        '--bg':             '#080c14',
-        '--bg-card':        '#0d1424',
-        '--bg-elevated':    '#14203a',
-        '--bg-input':       '#0b1220',
-        '--accent':         '#4d8ef0',
-        '--accent-dim':     'rgba(77,142,240,0.12)',
-        '--accent-border':  'rgba(77,142,240,0.28)',
-        '--accent-glow':    'rgba(77,142,240,0.18)',
-        '--accent-muted':   'rgba(77,142,240,0.55)',
-        '--text-primary':   '#e8eef8',
-        '--text-secondary': '#6a90b0',
-        '--text-muted':     '#4a6080',
-        '--border':         'rgba(255,255,255,0.05)',
-        '--border-strong':  'rgba(255,255,255,0.09)',
-        '--btn-bg':         '#4d8ef0',
-        '--btn-text':       '#080c14',
-        '--title-weight':   '400',
-        '--title-style':    'italic',
-        '--title-transform':'none',
-        '--slider-track':   '#14203a',
-        '--guided-accent':     '#50c8a0',
-        '--guided-accent-rgb': '80, 200, 160',
-        '--radius-lg':      '16px',
-        '--radius':         '12px',
-        '--radius-sm':      '8px',
-      },
-      swatch: { bg: '#080c14', accent: '#4d8ef0' },
-    },
-    C: {
-      name: 'Forest green',
-      vars: {
-        '--bg':             '#090e0a',
-        '--bg-card':        '#0e1a0f',
-        '--bg-elevated':    '#162618',
-        '--bg-input':       '#0c1810',
-        '--accent':         '#5aad5e',
-        '--accent-dim':     'rgba(90,173,94,0.12)',
-        '--accent-border':  'rgba(90,173,94,0.28)',
-        '--accent-glow':    'rgba(90,173,94,0.18)',
-        '--accent-muted':   'rgba(90,173,94,0.55)',
-        '--text-primary':   '#e8f0e8',
-        '--text-secondary': '#6a9a6c',
-        '--text-muted':     '#4a6e4c',
-        '--border':         'rgba(255,255,255,0.05)',
-        '--border-strong':  'rgba(255,255,255,0.09)',
-        '--btn-bg':         '#5aad5e',
-        '--btn-text':       '#090e0a',
-        '--title-weight':   '400',
-        '--title-style':    'italic',
-        '--title-transform':'none',
-        '--slider-track':   '#162618',
-        '--guided-accent':     '#9e7ec8',
-        '--guided-accent-rgb': '158, 126, 200',
-        '--radius-lg':      '16px',
-        '--radius':         '12px',
-        '--radius-sm':      '8px',
-      },
-      swatch: { bg: '#090e0a', accent: '#5aad5e' },
-    },
-    D: {
-      name: 'Busy Manhattan',
-      vars: {
-        '--bg':             '#3e3c38',
-        '--bg-card':        '#484541',
-        '--bg-elevated':    '#524f4a',
-        '--bg-input':       '#464440',
-        '--accent':         '#c85030',
-        '--accent-dim':     'rgba(200,80,48,0.14)',
-        '--accent-border':  'rgba(200,80,48,0.32)',
-        '--accent-glow':    'rgba(200,80,48,0.20)',
-        '--accent-muted':   'rgba(200,80,48,0.55)',
-        '--text-primary':   '#f5f2ee',
-        '--text-secondary': '#9a9690',
-        '--text-muted':     '#7a7672',
-        '--border':         'rgba(0,0,0,0.18)',
-        '--border-strong':  'rgba(0,0,0,0.26)',
-        '--btn-bg':         '#c85030',
-        '--btn-text':       '#f5f2ee',
-        '--title-weight':   '700',
-        '--title-style':    'normal',
-        '--title-transform':'uppercase',
-        '--slider-track':   '#524f4a',
-        '--guided-accent':     '#c8a030',
-        '--guided-accent-rgb': '200, 160, 48',
-        '--radius-lg':      '4px',
-        '--radius':         '4px',
-        '--radius-sm':      '4px',
-      },
-      swatch: { bg: '#3e3c38', accent: '#c85030' },
-    },
     E: {
       name: 'Miami beach sunset',
       vars: {
@@ -1229,6 +1136,37 @@ ${sharedRules}`;
         '--radius-sm':      '14px',
       },
       swatch: { bg: '#0a0818', accent: '#e84060' },
+    },
+    I: {
+      name: 'Swiss International',
+      vars: {
+        '--bg':             '#f4f3f0',
+        '--bg-card':        '#ffffff',
+        '--bg-elevated':    '#eceae6',
+        '--bg-input':       '#f8f7f4',
+        '--accent':         '#cc0000',
+        '--accent-dim':     'rgba(204,0,0,0.08)',
+        '--accent-border':  'rgba(204,0,0,0.24)',
+        '--accent-glow':    'rgba(204,0,0,0.12)',
+        '--accent-muted':   'rgba(204,0,0,0.50)',
+        '--text-primary':   '#1a1a1a',
+        '--text-secondary': '#5a5a5a',
+        '--text-muted':     '#9a9a9a',
+        '--border':         'rgba(0,0,0,0.08)',
+        '--border-strong':  'rgba(0,0,0,0.14)',
+        '--btn-bg':         '#cc0000',
+        '--btn-text':       '#ffffff',
+        '--title-weight':   '700',
+        '--title-style':    'normal',
+        '--title-transform':'uppercase',
+        '--slider-track':   '#eceae6',
+        '--guided-accent':     '#0044cc',
+        '--guided-accent-rgb': '0, 68, 204',
+        '--radius-lg':      '0px',
+        '--radius':         '0px',
+        '--radius-sm':      '0px',
+      },
+      swatch: { bg: '#f4f3f0', accent: '#cc0000' },
     },
   };
 
@@ -1294,9 +1232,9 @@ ${sharedRules}`;
       localStorage.setItem('monthly_cost_month', String(currentMonth));
     }
 
-    // Apply saved theme immediately to avoid flash
+    // Apply saved theme immediately to avoid flash; reset removed themes to default
     const savedTheme = localStorage.getItem('parla_theme') || 'A';
-    applyTheme(savedTheme);
+    applyTheme(THEMES[savedTheme] ? savedTheme : 'A');
 
     document.getElementById('app-version').textContent  = 'v' + APP_VERSION;
     document.getElementById('credits-version').textContent = APP_VERSION;
