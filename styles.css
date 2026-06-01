@@ -152,8 +152,8 @@
 
     /* Icon button (top bar) */
     .icon-btn {
-      width: 36px; height: 36px;
-      border-radius: 11px;
+      width: 32px; height: 32px;
+      border-radius: 10px;
       background: var(--bg-card);
       border: 1px solid var(--border-strong);
       display: flex; align-items: center; justify-content: center;
@@ -167,7 +167,7 @@
     }
 
     .icon-btn svg {
-      width: 17px; height: 17px;
+      width: 16px; height: 16px;
       stroke: var(--text-secondary);
       stroke-width: 1.7;
       stroke-linecap: round; stroke-linejoin: round;
@@ -258,7 +258,7 @@
       line-height: 1;
     }
 
-    .header-actions { display: flex; gap: 8px; }
+    .header-actions { display: flex; gap: 5px; }
 
     /* Scrollable area between header and footer */
     .home-content {
@@ -1130,30 +1130,10 @@
     /* INFO SCREEN          */
     /* ===================== */
 
-    .info-lang-toggle {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 24px;
-    }
-
-    .info-lang-btn {
-      padding: 5px 16px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border-strong);
-      background: transparent;
-      color: var(--text-secondary);
-      font-family: 'DM Sans', system-ui, sans-serif;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-
-    .info-lang-btn.active {
-      background: var(--accent);
-      color: var(--btn-text);
-      border-color: var(--accent);
+    .info-divider {
+      border: none;
+      border-top: 1px solid var(--border-strong);
+      margin: 24px 0;
     }
 
     /* ===================== */
