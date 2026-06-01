@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.9.2';
+  const APP_VERSION = '1.9.3';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
