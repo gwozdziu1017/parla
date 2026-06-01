@@ -29,8 +29,11 @@
         <button class="icon-btn" onclick="nav('credits-screen')" aria-label="Credits">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
         </button>
+        <button class="icon-btn" onclick="nav('info-screen')" aria-label="How to use">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>
+        </button>
         <button class="icon-btn" onclick="openThemePicker()" aria-label="Choose theme">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10 1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3c3.1 0 5.7-2.6 5.7-5.7C23 6.1 18 2 12 2z"/><circle cx="7" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>
         </button>
         <button class="icon-btn" onclick="nav('settings-screen')" aria-label="Settings">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -291,6 +294,37 @@
       <p class="credits-p">Built with patience, lots of determination, and an unreasonable number of iOS audio session bugs.</p>
     </div>
   </div><!-- /credits-screen -->
+
+  <div id="info-screen" class="screen">
+    <div class="nav-header">
+      <button class="back-btn" onclick="nav('home-screen')" aria-label="Back to Home">
+        <svg viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <span class="nav-title">How to use</span>
+    </div>
+    <div class="credits-body">
+      <p class="credits-title">How to use Parla</p>
+
+      <div class="info-lang-toggle">
+        <button class="info-lang-btn active" id="info-lang-en" onclick="toggleInfoLang('en')">EN</button>
+        <button class="info-lang-btn" id="info-lang-pl" onclick="toggleInfoLang('pl')">PL</button>
+      </div>
+
+      <div id="info-content-en">
+        <p class="credits-p">Parla works like a phone call with your English tutor. Open the app, choose between Grace and Ben, pick a personality that fits your mood, and set your English level. Then tap Start Session.</p>
+        <p class="credits-p">Your tutor will speak first. When it's your turn, just talk naturally — there's no timer, no pressure. When you're done with your thought, say <strong>EOT</strong> out loud and your tutor will respond.</p>
+        <p class="credits-p">If you make a mistake your tutor will correct you naturally without breaking the conversation. In guided mode, if you're stuck and don't know what to say, tap the help button and your tutor will show you the way.</p>
+        <p class="credits-p">Tap End Session whenever you're ready to stop.</p>
+      </div>
+
+      <div id="info-content-pl" style="display:none">
+        <p class="credits-p">Parla działa jak rozmowa telefoniczna z tutorem języka angielskiego. Otwórz aplikację, wybierz Grace lub Bena, dopasuj osobowość do nastroju i ustaw swój poziom angielskiego. Następnie naciśnij Start Session.</p>
+        <p class="credits-p">Tutor odezwie się pierwszy. Kiedy nadejdzie Twoja kolej, mów naturalnie — bez timera, bez presji. Kiedy skończysz swoją wypowiedź, powiedz głośno <strong>EOT</strong> i tutor odpowie.</p>
+        <p class="credits-p">Jeśli popełnisz błąd, tutor poprawi Cię naturalnie nie przerywając rozmowy. W trybie guided, jeśli nie wiesz co powiedzieć, naciśnij przycisk pomocy a tutor podpowie Ci jak to powiedzieć.</p>
+        <p class="credits-p">Naciśnij End Session kiedy chcesz zakończyć.</p>
+      </div>
+    </div>
+  </div><!-- /info-screen -->
 
   <!-- ======================== -->
   <!-- THEME PICKER OVERLAY    -->

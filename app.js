@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.9.0';
+  const APP_VERSION = '1.9.1';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -158,6 +158,13 @@
     document.getElementById(screenId).classList.add('active');
     if (screenId === 'settings-screen') refreshSettingsUI();
     if (screenId === 'vocab-screen')    renderVocab();
+  }
+
+  function toggleInfoLang(lang) {
+    document.getElementById('info-content-en').style.display = lang === 'en' ? '' : 'none';
+    document.getElementById('info-content-pl').style.display = lang === 'pl' ? '' : 'none';
+    document.getElementById('info-lang-en').classList.toggle('active', lang === 'en');
+    document.getElementById('info-lang-pl').classList.toggle('active', lang === 'pl');
   }
 
   /* ================================ */

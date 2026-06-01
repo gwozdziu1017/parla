@@ -1127,6 +1127,36 @@
     }
 
     /* ===================== */
+    /* INFO SCREEN          */
+    /* ===================== */
+
+    .info-lang-toggle {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .info-lang-btn {
+      padding: 5px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .info-lang-btn.active {
+      background: var(--accent);
+      color: var(--btn-text);
+      border-color: var(--accent);
+    }
+
+    /* ===================== */
     /* VOCABULARY SCREEN     */
     /* ===================== */
     #vocab-screen { overflow: hidden; }
