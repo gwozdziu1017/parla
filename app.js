@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.9.3';
+  const APP_VERSION = '1.9.4';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -1247,3 +1247,11 @@ ${sharedRules}`;
       localStorage.setItem('vocabulary_notebook', JSON.stringify(DEMO_WORDS));
     }
   })();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('[SW] Registered:', reg.scope))
+      .catch(err => console.log('[SW] Failed:', err));
+  });
+}
