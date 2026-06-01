@@ -2,7 +2,7 @@
   "name": "Parla",
   "short_name": "Parla",
   "description": "Voice-first English learning app",
-  "start_url": "/",
+  "start_url": "/parla/",
   "display": "standalone",
   "background_color": "#0f0e0c",
   "theme_color": "#c8a96e",
