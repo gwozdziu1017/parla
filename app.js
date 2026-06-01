@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.8.4';
+  const APP_VERSION = '1.8.5';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -89,6 +89,7 @@
   let silenceTimer         = null;
   let interimEl            = null;
   let accumTranscript      = '';
+  let endTurnPressed       = false;
   let conversationHistory  = [];       // [{role, content}] sent to Claude
   let firstTurn            = true;     // skip releaseAudioSession after greeting
   let audioContext         = null;
@@ -334,7 +335,7 @@
     addLine(divider);
     y += 4;
 
-    conversationHistory.forEach(msg => {
+    conversationHistory.filter(msg => msg.content !== '[EMPTY_TURN]').forEach(msg => {
       const speaker = msg.role === 'assistant' ? tutorName.split(' ')[0] : 'You';
       addLine(`${speaker}: ${msg.content}`, 10);
       y += 2;
@@ -626,8 +627,13 @@
       }
 
       const transcript = stripEOT(accumTranscript);
+      const wasEndTurnPressed = endTurnPressed;
+      endTurnPressed = false;
       if (transcript.trim().length > 0) {
         onSpeechResult(transcript);
+      } else if (wasEndTurnPressed) {
+        if (interimEl) { interimEl.remove(); interimEl = null; }
+        onEmptyTurn();
       } else {
         // Only EOT or nothing heard — remove empty bubble and listen again
         if (interimEl) { interimEl.remove(); interimEl = null; }
@@ -682,10 +688,11 @@
     if (!sessionActive || appState !== STATE.LISTENING) return;
     clearTimeout(silenceTimer);
     silenceTimer = null;
+    endTurnPressed = true;
     if (recognition) {
       try { recognition.stop(); } catch {}
     }
-    // onend will fire and handle sending transcript or restarting listening
+    // onend will fire and handle sending transcript or [EMPTY_TURN]
   }
 
   async function onGuideBtn() {
@@ -724,6 +731,18 @@
     }
     if (audioContext && audioContext.state !== 'closed') {
       try { audioContext.suspend(); } catch {}
+    }
+  }
+
+  async function onEmptyTurn() {
+    setAppState(STATE.PROCESSING);
+    try {
+      const raw = await askClaude('[EMPTY_TURN]');
+      if (!raw || !sessionActive) return;
+      const cleaned = handleVocabSave(raw);
+      speak(cleaned);
+    } catch (err) {
+      speak('Sorry, I had a problem connecting. The error was: ' + err.message);
     }
   }
 
@@ -800,6 +819,9 @@
     // ── SESSION START INSTRUCTION ─────────────────────────────────────────────
     const sessionStartBlock = `When you receive [SESSION_START], introduce yourself briefly in character and start the conversation naturally. One or two sentences maximum. Do not mention [SESSION_START] in your response.`;
 
+    // ── EMPTY TURN INSTRUCTION ────────────────────────────────────────────────
+    const emptyTurnBlock = `When you receive [EMPTY_TURN], respond with exactly: "Something went wrong, I didn't get your message." Then wait for the student to respond.`;
+
     // ── GUIDED MODE ───────────────────────────────────────────────────────────
     if (isGuided) {
       return `You are ${tutor.name}, an English tutor in a voice app called Parla. You are teaching a complete beginner Polish native speaker.
@@ -822,6 +844,8 @@ GUIDED MODE RULES:
 ${correctionBlock}
 
 ${britishBlock}
+
+${emptyTurnBlock}
 
 No markdown, no lists.`;
     }
@@ -879,6 +903,8 @@ ${levelBlock}
 ${correctionBlock}
 
 ${britishBlock}
+
+${emptyTurnBlock}
 
 ${sharedRules}`;
   }
