@@ -732,6 +732,14 @@
 
     .settings-input:focus { border-color: var(--accent-border); }
 
+    .settings-key-error {
+      font-size: 12px;
+      color: #c45c5c;
+      margin: 4px 0 0;
+      padding: 0 2px;
+      line-height: 1.4;
+    }
+
     /* cost rows */
     .cost-row {
       padding: 13px 16px;

@@ -1,4 +1,4 @@
-  const APP_VERSION = '2.0.1';
+  const APP_VERSION = '2.0.2';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -88,7 +88,6 @@
   let accumTranscript      = '';
   let endTurnPressed       = false;
   let conversationHistory  = [];       // [{role, content}] sent to Claude
-  let firstTurn            = true;     // skip releaseAudioSession after greeting
   let audioContext         = null;
   let currentAudioSource      = null;  // currently playing BufferSourceNode
   let currentSessionId        = 0;     // incremented each session; async callbacks check this to discard stale audio
@@ -152,6 +151,10 @@
   /* NAVIGATION                       */
   /* ================================ */
   function nav(screenId) {
+    if (sessionActive && screenId !== 'session-screen') {
+      if (!confirm('Session in progress — are you sure you want to leave?')) return;
+      endSession();
+    }
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(screenId).classList.add('active');
     if (screenId === 'settings-screen') refreshSettingsUI();
@@ -221,34 +224,49 @@
   function resetMonthly() {
     monthlyCost = 0;
     localStorage.setItem('monthly_cost', '0');
+    localStorage.setItem('monthly_cost_month_index', String(new Date().getMonth()));
     document.getElementById('s-monthly-cost').textContent = formatCost(0);
   }
 
   /* ================================ */
   /* PERSISTENCE (localStorage)       */
   /* ================================ */
+  function getSettings() {
+    try { return JSON.parse(localStorage.getItem('parla_settings') || '{}'); } catch { return {}; }
+  }
+
   function persist() {
     const data = {
       anthropicKey: document.getElementById('anthropic-key')?.value || '',
       openaiKey:    document.getElementById('openai-key')?.value    || '',
     };
+    validateApiKeys(data);
     localStorage.setItem('parla_settings', JSON.stringify(data));
-    // Only overwrite standalone API key entries when the user has actually typed a value.
-    // This prevents any other persist() call (theme change, slider, etc.) from
-    // accidentally wiping keys that were stored in a previous session.
-    if (data.anthropicKey) localStorage.setItem('anthropic_api_key', data.anthropicKey);
-    if (data.openaiKey)    localStorage.setItem('openai_api_key',    data.openaiKey);
+  }
+
+  function validateApiKeys(data) {
+    const anthErr = document.getElementById('anthropic-key-error');
+    const openErr = document.getElementById('openai-key-error');
+    if (anthErr) anthErr.style.display = (data.anthropicKey && !data.anthropicKey.startsWith('sk-ant-')) ? '' : 'none';
+    if (openErr) openErr.style.display = (data.openaiKey    && !data.openaiKey.startsWith('sk-'))       ? '' : 'none';
   }
 
   function restore() {
-    const raw = localStorage.getItem('parla_settings');
-    let d = {};
-    if (raw) { try { d = JSON.parse(raw); } catch {} }
+    // One-time migration: move old standalone keys into parla_settings
+    const oldAnthropic = localStorage.getItem('anthropic_api_key');
+    const oldOpenAI    = localStorage.getItem('openai_api_key');
+    if (oldAnthropic || oldOpenAI) {
+      const existing = getSettings();
+      if (oldAnthropic && !existing.anthropicKey) existing.anthropicKey = oldAnthropic;
+      if (oldOpenAI    && !existing.openaiKey)    existing.openaiKey    = oldOpenAI;
+      localStorage.setItem('parla_settings', JSON.stringify(existing));
+      localStorage.removeItem('anthropic_api_key');
+      localStorage.removeItem('openai_api_key');
+    }
 
-    const storedAnthropic = localStorage.getItem('anthropic_api_key') || d.anthropicKey || '';
-    if (storedAnthropic) document.getElementById('anthropic-key').value = storedAnthropic;
-    const storedOpenAI    = localStorage.getItem('openai_api_key')    || d.openaiKey    || '';
-    if (storedOpenAI)    document.getElementById('openai-key').value    = storedOpenAI;
+    const d = getSettings();
+    if (d.anthropicKey) document.getElementById('anthropic-key').value = d.anthropicKey;
+    if (d.openaiKey)    document.getElementById('openai-key').value    = d.openaiKey;
   }
 
   /* ================================ */
@@ -267,7 +285,6 @@
     sessionStarted      = false;
     sessionCost         = 0;
     conversationHistory = [];
-    firstTurn           = true;
     stopListening();
     setAppState(STATE.IDLE);
     updateCostDisplay();
@@ -448,7 +465,7 @@
 
   async function speak(text) {
     const mySessionId = currentSessionId; // capture — used to detect stale callbacks
-    const openaiKey = localStorage.getItem('openai_api_key')?.trim();
+    const openaiKey = (getSettings().openaiKey || '').trim();
     if (!openaiKey) {
       alert('Please add your OpenAI API key in Settings.');
       sessionStarted = false;
@@ -512,19 +529,9 @@
 
       if (mySessionId !== currentSessionId) return;
 
-      // Playback finished — transition to next turn
-      // 200ms breath pause + 2000ms standard delay = 2200ms total before mic opens
+      setAppState(STATE.IDLE);
       if (sessionActive) {
-        setAppState(STATE.IDLE);
-        if (firstTurn) {
-          firstTurn = false;
-          setTimeout(() => startListening(), 2200);
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 2200));
-          startListening();
-        }
-      } else {
-        setAppState(STATE.IDLE);
+        setTimeout(() => startListening(), 2200);
       }
 
     } catch (err) {
@@ -916,7 +923,7 @@ ${sharedRules}`;
   }
 
   async function askClaude(userText) {
-    const apiKey = localStorage.getItem('anthropic_api_key') || '';
+    const apiKey = getSettings().anthropicKey || '';
     if (!apiKey) {
       alert('Please add your Anthropic API key in Settings first.');
       endSession();
@@ -1231,13 +1238,19 @@ ${sharedRules}`;
 
     fetchExchangeRate();
 
-    // Monthly cost auto-reset
+    // Monthly cost auto-reset (month stored as 0-indexed integer, 0=Jan…11=Dec)
+    // One-time key migration from old name
+    const oldMonthKey = localStorage.getItem('monthly_cost_month');
+    if (oldMonthKey !== null) {
+      localStorage.setItem('monthly_cost_month_index', oldMonthKey);
+      localStorage.removeItem('monthly_cost_month');
+    }
     const currentMonth = new Date().getMonth();
-    const storedMonth  = parseInt(localStorage.getItem('monthly_cost_month') ?? '-1', 10);
+    const storedMonth  = parseInt(localStorage.getItem('monthly_cost_month_index') ?? '-1', 10);
     if (storedMonth !== currentMonth) {
       monthlyCost = 0;
       localStorage.setItem('monthly_cost', '0');
-      localStorage.setItem('monthly_cost_month', String(currentMonth));
+      localStorage.setItem('monthly_cost_month_index', String(currentMonth));
     }
 
     // Apply saved theme immediately to avoid flash; reset removed themes to default

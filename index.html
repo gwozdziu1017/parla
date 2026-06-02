@@ -146,12 +146,14 @@
             <div class="settings-row-label">Anthropic API key</div>
             <input class="settings-input" type="password" id="anthropic-key"
               placeholder="sk-ant-…" autocomplete="off" oninput="persist()">
+            <p class="settings-key-error" id="anthropic-key-error" style="display:none">This doesn't look like a valid Anthropic key (should start with sk-ant-)</p>
           </div>
 
           <div class="settings-row">
             <div class="settings-row-label">OpenAI API key</div>
             <input class="settings-input" type="password" id="openai-key"
               placeholder="sk-…" autocomplete="off" oninput="persist()">
+            <p class="settings-key-error" id="openai-key-error" style="display:none">This doesn't look like a valid OpenAI key (should start with sk-)</p>
           </div>
 
         </div>
