@@ -1,4 +1,4 @@
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.0.1';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -6,16 +6,16 @@
     ttsHD:        30.00 / 1_000_000,
   };
 
-  let usdPlnRate = 4.00; // fallback; overwritten on page load
+  let usdPlnRate     = 4.00;  // fallback; overwritten on page load
+  let rateIsFallback = true;  // cleared once a live rate is fetched
 
   async function fetchExchangeRate() {
     try {
       const res = await fetch('https://open.er-api.com/v6/latest/USD');
       if (!res.ok) return;
       const data = await res.json();
-      if (data.rates?.PLN) usdPlnRate = data.rates.PLN;
+      if (data.rates?.PLN) { usdPlnRate = data.rates.PLN; rateIsFallback = false; }
     } catch(e) {}
-
   }
 
   /* ================================ */
@@ -122,7 +122,10 @@
       source.connect(ctx.destination); // direct — no gain node
       source.start(0);
       await new Promise(resolve => setTimeout(resolve, 100));
-    } catch(e) {}
+      return true;
+    } catch(e) {
+      return false;
+    }
   }
 
   async function requestWakeLock() {
@@ -205,8 +208,9 @@
   /* SETTINGS CONTROLS                */
   /* ================================ */
   function formatCost(usd) {
-    const pln = usd * usdPlnRate;
-    return `$${usd.toFixed(2)} / ${pln.toFixed(2)} zł`;
+    const pln    = usd * usdPlnRate;
+    const prefix = rateIsFallback ? '~' : '';
+    return `$${usd.toFixed(2)} / ${prefix}${pln.toFixed(2)} zł`;
   }
 
   function refreshSettingsUI() {
@@ -258,7 +262,6 @@
 
     // reset session state — stop any in-flight audio first
     currentSessionId++;
-    appState = STATE.IDLE;
     stopAudio();
     sessionActive       = false;
     sessionStarted      = false;
@@ -266,8 +269,7 @@
     conversationHistory = [];
     firstTurn           = true;
     stopListening();
-    sessionState = 'idle';
-    applyState();
+    setAppState(STATE.IDLE);
     updateCostDisplay();
 
     const log = document.getElementById('conv-log');
@@ -278,14 +280,12 @@
 
   function endSession() {
     currentSessionId++;
-    appState = STATE.IDLE;
     sessionActive = false;
     releaseWakeLock();
     stopListening();
     stopAudio();
     sessionStarted = false;
-    sessionState   = 'idle';
-    applyState();
+    setAppState(STATE.IDLE);
     // Show post-session actions instead of navigating away immediately
     document.getElementById('session-footer-active').style.display = 'none';
     document.getElementById('session-footer-ended').style.display  = 'flex';
@@ -351,7 +351,11 @@
     if (!sessionStarted) {
       // Force-unlock AudioContext on iOS — must happen synchronously inside gesture handler.
       // Playing a silent buffer is more reliable than resume() alone on iOS Safari.
-      await unlockAudioContext();
+      const audioOk = await unlockAudioContext();
+      if (!audioOk) {
+        const hint = document.getElementById('sess-hint');
+        if (hint) hint.textContent = 'Audio may not work on this device — check your volume and silent switch';
+      }
 
       sessionStarted = true;
       sessionActive  = true;
@@ -606,6 +610,7 @@
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         silenceTimer = null;
+        if (!recognition || !sessionActive) return;
         try { recognition.stop(); } catch {}
       }, SILENCE_MS);
     };
@@ -784,11 +789,20 @@
   function getSessionState() { return sessionState; }
   function setSessionState(state) { sessionState = state; }
 
+  function sanitizePromptInput(str) {
+    return (str || '')
+      .replace(/\[.*?\]/g, '')
+      .replace(/ignore\s+(all\s+|previous\s+|above\s+)?instructions/gi, '')
+      .replace(/system\s+prompt/gi, '')
+      .trim()
+      .slice(0, 500);
+  }
+
   // Accept optional params so tests can call it without touching globals
   function buildSystemPrompt(tutorNameParam, personalityParam, levelParam, customDescParam) {
     const personality = personalityParam !== undefined ? personalityParam : selectedPersonality;
     const level       = levelParam       !== undefined ? levelParam       : selectedLevel;
-    const customDesc  = customDescParam  !== undefined ? customDescParam  : customTutorDesc;
+    const customDesc  = sanitizePromptInput(customDescParam !== undefined ? customDescParam : customTutorDesc);
     const tutor = tutorNameParam !== undefined
       ? (Object.values(TUTORS).find(t => t.name === tutorNameParam) || TUTORS[activeTutor])
       : TUTORS[activeTutor];
@@ -932,6 +946,8 @@ ${sharedRules}`;
     }
 
     const data       = await response.json();
+    if (!sessionActive) return '';   // session ended while API was in flight
+
     const replyText  = data.content?.[0]?.text || '';
 
     const inputCost  = (data.usage?.input_tokens  || 0) * COSTS.claudeInput;
