@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.9.6';
+  const APP_VERSION = '2.0.0';
 
   const COSTS = {
     claudeInput:  3.00  / 1_000_000,
@@ -14,10 +14,8 @@
       if (!res.ok) return;
       const data = await res.json();
       if (data.rates?.PLN) usdPlnRate = data.rates.PLN;
-      console.log('[Parla] USD/PLN rate:', usdPlnRate);
-    } catch(e) {
-      console.log('[Parla] Exchange rate fetch failed, using fallback 4.00');
-    }
+    } catch(e) {}
+
   }
 
   /* ================================ */
@@ -34,7 +32,6 @@
   let appState = STATE.IDLE;
 
   function setAppState(next) {
-    console.log('[STATE]', appState, '→', next);
     appState = next;
     // Map appState to the sessionState values applyState() reads
     // loading is a transient visual state set directly by speak() and onGuideBtn
@@ -106,7 +103,6 @@
     try {
       const ctx = getAudioContext();
       await ctx.resume();
-      console.log('[Parla] AudioContext unlocked on first touch, state:', ctx.state);
     } catch(e) {}
   }
 
@@ -132,9 +128,8 @@
   async function requestWakeLock() {
     try {
       wakeLock = await navigator.wakeLock.request('screen');
-    } catch (e) {
-      console.log('WakeLock not supported:', e);
-    }
+    } catch (e) {}
+
   }
 
   function releaseWakeLock() {
@@ -363,14 +358,14 @@
       setAppState(STATE.PROCESSING);
       requestWakeLock();
 
-      // Now safe to generate and speak the real first message
-      console.log('[Parla] Sending [SESSION_START] to Claude');
+      conversationHistory.push({ role: 'user', content: '[SESSION_START]' });
       try {
         const raw = await askClaude('[SESSION_START]');
-        if (!raw || !sessionActive) return;
+        if (!raw || !sessionActive) { conversationHistory.pop(); return; }
         const cleaned = handleVocabSave(raw);
         speak(cleaned);
       } catch(err) {
+        conversationHistory.pop();
         speak('Sorry, I had a problem starting the session. The error was: ' + err.message);
       }
     }
@@ -456,8 +451,6 @@
       return;
     }
 
-    console.log('[Parla] speak() called:', text.slice(0, 60));
-
     try {
       const response = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
@@ -472,7 +465,7 @@
         }),
       });
 
-      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded (session ended)'); return; }
+      if (mySessionId !== currentSessionId) return;
 
       if (!response.ok) {
         let msg = `API error ${response.status}`;
@@ -485,23 +478,20 @@
       appendMessage('tutor', text);
       // 400ms "thinking" pause before audio plays — feels more natural
       await new Promise(resolve => setTimeout(resolve, 400));
-      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded during pre-play pause'); return; }
+      if (mySessionId !== currentSessionId) return;
       setAppState(STATE.SPEAKING);
 
       const arrayBuffer = await response.arrayBuffer();
-      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after fetch (session ended)'); return; }
+      if (mySessionId !== currentSessionId) return;
 
       const ctx = getAudioContext();
-
-      // Always resume — context may be suspended from previous session cleanup or iOS init
-      console.log('[Parla] AudioContext state before resume:', ctx.state);
       await ctx.resume();
-      console.log('[Parla] AudioContext state after resume:', ctx.state);
 
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after decode (session ended)'); return; }
+      if (mySessionId !== currentSessionId) return;
 
       await new Promise((resolve) => {
+        if (mySessionId !== currentSessionId) { resolve(); return; }
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         const gainNode = ctx.createGain();
@@ -511,14 +501,12 @@
         currentAudioSource = source;
         source.onended = () => {
           if (currentAudioSource === source) currentAudioSource = null;
-          // Suspend context after playback — releases iOS audio session for mic
-          ctx.suspend().then(resolve);
+          (ctx.state !== 'closed' ? ctx.suspend() : Promise.resolve()).then(resolve);
         };
-        console.log('[Parla] Starting audio playback');
         source.start(0);
       });
 
-      if (mySessionId !== currentSessionId) { console.log('[Parla] speak() discarded after playback (session ended)'); return; }
+      if (mySessionId !== currentSessionId) return;
 
       // Playback finished — transition to next turn
       // 200ms breath pause + 2000ms standard delay = 2200ms total before mic opens
@@ -546,10 +534,7 @@
   /* ================================ */
   function startListening() {
     if (!sessionActive) return;
-    if (appState !== STATE.IDLE) {
-      console.log('[STATE] startListening() blocked — appState is', appState);
-      return;
-    }
+    if (appState !== STATE.IDLE) return;
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
@@ -559,6 +544,16 @@
     }
 
     accumTranscript = '';
+
+    // Tear down any existing recognition instance before creating a new one
+    if (recognition) {
+      recognition.onresult  = null;
+      recognition.onend     = null;
+      recognition.onerror   = null;
+      recognition.onspeechend = null;
+      try { recognition.abort(); } catch(e) {}
+      recognition = null;
+    }
 
     // Interim bubble
     const log = document.getElementById('conv-log');
@@ -621,7 +616,6 @@
       recognition = null;
 
       if (!sessionActive || appState === STATE.GUIDE_PENDING || appState === STATE.PROCESSING || appState === STATE.SPEAKING) {
-        console.log('[STATE] onend ignored — appState is', appState);
         if (interimEl) { interimEl.remove(); interimEl = null; }
         return;
       }
@@ -713,59 +707,57 @@
     if (guideBtn) guideBtn.classList.remove('visible');
 
     setAppState(STATE.PROCESSING);
+    conversationHistory.push({ role: 'user', content: '[GUIDE_REQUEST]' });
     try {
       const raw = await askClaude('[GUIDE_REQUEST]');
-      if (!raw || !sessionActive) { setAppState(STATE.IDLE); return; }
+      if (!raw || !sessionActive) { conversationHistory.pop(); setAppState(STATE.IDLE); return; }
       const cleaned = handleVocabSave(raw);
       speak(cleaned);
     } catch (err) {
+      conversationHistory.pop();
       setAppState(STATE.IDLE);
       speak('Sorry, I had a problem. The error was: ' + err.message);
     }
   }
 
-  function stopAudio() {
+  async function stopAudio() {
     if (currentAudioSource) {
       try { currentAudioSource.stop(); } catch(e) {}
       currentAudioSource = null;
     }
-    if (audioContext && audioContext.state !== 'closed') {
-      try { audioContext.suspend(); } catch {}
+    if (audioContext) {
+      try { await audioContext.close(); } catch(e) {}
+      audioContext = null;
     }
   }
 
   async function onEmptyTurn() {
     setAppState(STATE.PROCESSING);
+    conversationHistory.push({ role: 'user', content: '[EMPTY_TURN]' });
     try {
       const raw = await askClaude('[EMPTY_TURN]');
-      if (!raw || !sessionActive) return;
+      if (!raw || !sessionActive) { conversationHistory.pop(); return; }
       const cleaned = handleVocabSave(raw);
       speak(cleaned);
     } catch (err) {
-      speak('Sorry, I had a problem connecting. The error was: ' + err.message);
+      conversationHistory.pop();
+      if (sessionActive) speak('Sorry, I had a problem connecting. The error was: ' + err.message);
     }
   }
 
   async function onSpeechResult(transcript) {
     if (interimEl) { interimEl.remove(); interimEl = null; }
-
-    if (selectedPersonality === 'guided') {
-      console.log('[GUIDED] Sending to Claude:', JSON.stringify(transcript));
-    }
-
     appendMessage('user', transcript);
-
     setAppState(STATE.PROCESSING);
-
+    conversationHistory.push({ role: 'user', content: transcript });
     try {
       const raw = await askClaude(transcript);
-      if (!raw || !sessionActive) return;
-
+      if (!raw || !sessionActive) { conversationHistory.pop(); return; }
       const cleaned = handleVocabSave(raw);
-      console.log('[Parla] Claude response received, calling speak():', cleaned.slice(0, 60));
       speak(cleaned);
     } catch (err) {
-      speak('Sorry, I had a problem connecting. The error was: ' + err.message);
+      conversationHistory.pop();
+      if (sessionActive) speak('Sorry, I had a problem connecting. The error was: ' + err.message);
     }
   }
 
@@ -917,8 +909,6 @@ ${sharedRules}`;
       return null;
     }
 
-    conversationHistory.push({ role: 'user', content: userText });
-
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -938,7 +928,6 @@ ${sharedRules}`;
     if (!response.ok) {
       let msg = `Claude API error ${response.status}`;
       try { const e = await response.json(); msg = e.error?.message || msg; } catch {}
-      conversationHistory.pop(); // remove the user turn we just pushed
       throw new Error(msg);
     }
 
@@ -1024,6 +1013,10 @@ ${sharedRules}`;
     },
   ];
 
+  function escapeHTML(str) {
+    return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function renderVocab() {
     const body  = document.getElementById('vocab-body');
     const words = JSON.parse(localStorage.getItem('vocabulary_notebook') || 'null') || DEMO_WORDS;
@@ -1049,15 +1042,15 @@ ${sharedRules}`;
       item.dataset.idx = i;
       item.innerHTML = `
         <div class="vocab-item-head" onclick="toggleWord(${i})">
-          <span class="vocab-word">${w.word}</span>
-          <span class="vocab-date">${w.date}</span>
+          <span class="vocab-word">${escapeHTML(w.word)}</span>
+          <span class="vocab-date">${escapeHTML(w.date)}</span>
           <svg class="vocab-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="vocab-item-body">
           <p class="vocab-field-label">Example sentence</p>
-          <p class="vocab-field-text example">"${w.example}"</p>
+          <p class="vocab-field-text example">"${escapeHTML(w.example)}"</p>
           <p class="vocab-field-label">Usage note</p>
-          <p class="vocab-field-text">${w.note}</p>
+          <p class="vocab-field-text">${escapeHTML(w.note)}</p>
         </div>`;
       list.appendChild(item);
     });
@@ -1179,7 +1172,6 @@ ${sharedRules}`;
     Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
     activeThemeId = id;
     localStorage.setItem('parla_theme', id);
-    renderThemeList();
   }
 
   function openThemePicker() {
