@@ -237,8 +237,8 @@
 
   function persist() {
     const data = {
-      anthropicKey: document.getElementById('anthropic-key')?.value || '',
-      openaiKey:    document.getElementById('openai-key')?.value    || '',
+      anthropicKey: (document.getElementById('anthropic-key')?.value || '').trim(),
+      openaiKey:    (document.getElementById('openai-key')?.value    || '').trim(),
     };
     validateApiKeys(data);
     localStorage.setItem('parla_settings', JSON.stringify(data));
@@ -923,7 +923,7 @@ ${sharedRules}`;
   }
 
   async function askClaude(userText) {
-    const apiKey = getSettings().anthropicKey || '';
+    const apiKey = (getSettings().anthropicKey || '').trim();
     if (!apiKey) {
       alert('Please add your Anthropic API key in Settings first.');
       endSession();
