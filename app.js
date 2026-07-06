@@ -1,4 +1,4 @@
-  const APP_VERSION = '1.3.3';
+  const APP_VERSION = '3.0.0';
 
   /* ================================ */
   /* STATE MACHINE                    */
