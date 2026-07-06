@@ -663,7 +663,7 @@
           'content-type':                           'application/json',
         },
         body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
+          model:      'claude-sonnet-5',
           max_tokens: 5,
           system:     'Does this English sentence feel complete or unfinished? Reply with one word only: complete or incomplete.',
           messages:   [{ role: 'user', content: transcript }],
@@ -825,7 +825,7 @@ ${sharedRules}`;
         'content-type':                           'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-20250514',
+        model:      'claude-sonnet-5',
         max_tokens: 1000,
         system:     buildSystemPrompt(),
         messages:   conversationHistory,
