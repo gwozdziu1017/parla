@@ -665,6 +665,7 @@
         body: JSON.stringify({
           model:      'claude-sonnet-5',
           max_tokens: 5,
+          thinking:   { type: 'disabled' },
           system:     'Does this English sentence feel complete or unfinished? Reply with one word only: complete or incomplete.',
           messages:   [{ role: 'user', content: transcript }],
         }),
@@ -674,7 +675,7 @@
         return true; // fail open
       }
       const data = await response.json();
-      const word = (data.content?.[0]?.text || '').trim().toLowerCase();
+      const word = (data.content?.find(b => b.type === 'text')?.text || '').trim().toLowerCase();
       console.log('[GUIDED] Completeness API raw response:', JSON.stringify(word));
       return word !== 'incomplete';
     } catch (e) {
@@ -827,6 +828,7 @@ ${sharedRules}`;
       body: JSON.stringify({
         model:      'claude-sonnet-5',
         max_tokens: 1000,
+        thinking:   { type: 'disabled' },
         system:     buildSystemPrompt(),
         messages:   conversationHistory,
       }),
@@ -840,7 +842,7 @@ ${sharedRules}`;
     }
 
     const data       = await response.json();
-    const replyText  = data.content?.[0]?.text || '';
+    const replyText  = data.content?.find(b => b.type === 'text')?.text || '';
 
     // Cost: $3/M input tokens, $15/M output tokens
     const inputCost  = (data.usage?.input_tokens  || 0) * 3  / 1_000_000;
