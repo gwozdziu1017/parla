@@ -941,6 +941,7 @@ ${sharedRules}`;
       body: JSON.stringify({
         model:      'claude-sonnet-5',
         max_tokens: 1000,
+        thinking:   { type: 'disabled' },
         system:     buildSystemPrompt(),
         messages:   conversationHistory,
       }),
@@ -955,7 +956,7 @@ ${sharedRules}`;
     const data       = await response.json();
     if (!sessionActive) return '';   // session ended while API was in flight
 
-    const replyText  = data.content?.[0]?.text || '';
+    const replyText  = data.content?.find(b => b.type === 'text')?.text || '';
 
     const inputCost  = (data.usage?.input_tokens  || 0) * COSTS.claudeInput;
     const outputCost = (data.usage?.output_tokens || 0) * COSTS.claudeOutput;
